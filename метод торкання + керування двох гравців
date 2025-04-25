@@ -1,0 +1,85 @@
+import pygame
+pygame.init()
+
+# налаштування вікна
+WIDTH, HEIGHT = 1280, 720
+pygame.display.set_caption("clicker")
+screen = pygame.display.set_mode((WIDTH, HEIGHT)) #розмір вікна
+#фон
+background = pygame.image.load("background.png")
+background = pygame.transform.scale(background, (WIDTH,HEIGHT))
+
+clock = pygame.time.Clock()
+
+# Логіка-----------------------------------------
+class GameObject():
+    def __init__(self, filename, x=0, y=0, width=10,height=10):
+        self.player_image = pygame.image.load(filename)
+        self.player_image = pygame.transform.scale(self.player_image, (width, height))
+        self.image = self.player_image
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+
+    def draw(self):
+        screen.blit(self.image, self.rect)
+#-----------------------------------------
+
+# Налаштування та створення персонажа-----------------------------------------
+player1_x = -50
+player1_y = 380
+player1 = GameObject("player.png", player1_x, player1_y, 300, 230)
+
+player2_x = 1230
+player2_y = 380
+player2 = GameObject("player.png", player2_x, player2_y, 300, 230)
+# -----------------------------------------
+
+# Параметри для гри (старт) -----------------------------------------
+speed = 5
+start = True
+# -----------------------------------------
+
+
+# Цикл программи-----------------------------------------
+while start:
+    screen.blit(background, (0,0))
+    player1.draw()
+    player2.draw()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            start = False
+
+            
+    
+    
+    # ЛОГІКА КЕРУВАННЯ ДВОХ ГРАВЦІВ
+
+    keys = pygame.key.get_pressed()
+    
+    # Управління першим гравцем (A, D)
+    if keys[pygame.K_a]:
+        player1.rect.x -= speed
+    if keys[pygame.K_d]:
+        player1.rect.x += speed
+
+    # Управління другим гравцем (←, →)
+    if keys[pygame.K_LEFT]:
+        player2.rect.x -= speed
+    if keys[pygame.K_RIGHT]:
+        player2.rect.x += speed
+
+    # -----------------------------------
+
+    # МЕТОД ТОРКАНА З ГРАВЦЕМ/ОБ'ЄКТОМ
+    if player1.rect.colliderect(player2.rect):
+        print("Hello")
+
+
+
+    
+
+    clock.tick(60) #60 кадрів/сек
+    pygame.display.flip()
+pygame.quit()
