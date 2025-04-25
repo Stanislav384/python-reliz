@@ -12,8 +12,8 @@ background = pygame.image.load("background.png")
 background = pygame.transform.scale(background, (WIDTH,HEIGHT))
 
 clock = pygame.time.Clock()
-# Логіка-----------------------------------------
 
+# Логіка-----------------------------------------
 class GameObject():
     def __init__(self, filename, x=0, y=0, width=10,height=10):
         self.player_image = pygame.image.load(filename)
@@ -25,15 +25,22 @@ class GameObject():
 
     def draw(self):
         screen.blit(self.image, self.rect)
+#-----------------------------------------
 
+# Налаштування та створення персонажа-----------------------------------------
 player_x = WIDTH // 2 - 150
 player_y = 330
 player = GameObject("player.png", player_x, player_y, 300, 230)
+# -----------------------------------------
 
+# Параметри для гри (Текст - рахунок - старт) -----------------------------------------
 font = pygame.font.Font(None, 36)
-
 score = 0
 start = True
+# -----------------------------------------
+
+
+# Цикл программи-----------------------------------------
 while start:
     screen.blit(background, (0,0))
     player.draw()
@@ -44,6 +51,7 @@ while start:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             start = False
+        # Логіка натискання на гравця, обьект-----------------------------------------
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if player.rect.collidepoint(event.pos):
                 score += 1
