@@ -24,8 +24,6 @@ class GameObject():
         self.rect.x = x
         self.rect.y = y
         self.facing_right = True
-        self.velocity_y = 0 
-        self.isJumping = False 
 
     def draw(self):
         screen.blit(self.image, self.rect)
