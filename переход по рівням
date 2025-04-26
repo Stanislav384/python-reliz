@@ -1,0 +1,118 @@
+import pygame
+import random
+
+pygame.init()
+
+pygame.display.set_caption("Перша Гра")
+WIDTH, HEIGHT = 1280, 720
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+
+# Список фонів для рівнів
+backgrounds = [
+    pygame.transform.scale(pygame.image.load("background1.png"), (WIDTH, HEIGHT)),
+    pygame.transform.scale(pygame.image.load("background2.jpg"), (WIDTH, HEIGHT)),
+    pygame.transform.scale(pygame.image.load("background3.png"), (WIDTH, HEIGHT)),
+]
+
+current_level = 0  # Номер поточного рівня
+
+clock = pygame.time.Clock()
+
+class GameObject():
+    def __init__(self, filename, x=0, y=0, width=10, height=10):
+        # Завантаження зображення
+        self.image_right = pygame.image.load(filename)
+        self.image_right = pygame.transform.scale(self.image_right, (width, height))
+        self.image_left = pygame.transform.flip(self.image_right, True, False)  # Дзеркальне відображення для руху вліво
+        self.image = self.image_right
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.facing_right = True
+        self.velocity_y = 0
+        self.isJumping = False
+
+    def draw(self):
+        # Малюємо об'єкт на екрані
+        screen.blit(self.image, self.rect)
+
+    def move(self, dx):
+        # Рухаємо об'єкт по осі X
+        self.rect.x += dx
+        if dx > 0:
+            self.image = self.image_right
+            self.facing_right = True
+        if dx < 0:
+            self.image = self.image_left
+            self.facing_right = False
+
+    def apply_gravity(self):
+        # Додаємо гравітацію
+        self.velocity_y += GRAVITY
+        self.rect.y += self.velocity_y
+
+        # Перевірка чи персонаж не нижче землі
+        if self.rect.y >= GROUND_Y:
+            self.rect.y = GROUND_Y
+            self.velocity_y = 0
+            self.isJumping = False
+
+    def jump(self):
+        # Стрибок
+        if not self.isJumping:
+            self.velocity_y = JUMP_POWER
+            self.isJumping = True
+
+player_x = 0
+player_y = 330
+player_forward = 0
+
+GRAVITY = 1
+JUMP_POWER = -20
+GROUND_Y = 500
+
+# Створюємо гравця і портал
+player = GameObject("player.png", player_x, player_y, 300, 230)
+portal = GameObject("portal.jpg", 0, 0, 80, 100)  # Портал розташовано праворуч
+
+start = True
+while start:
+    # Малюємо поточний фон
+    screen.blit(backgrounds[current_level], (0, 0))
+    player.draw()
+    portal.draw()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            start = False  # Вихід з гри
+
+        elif event.type == pygame.KEYDOWN:
+            # Натискання кнопок
+            if event.key == pygame.K_d:
+                player_forward = 5  # Рух праворуч
+            elif event.key == pygame.K_a:
+                player_forward = -5  # Рух ліворуч
+            elif event.key == pygame.K_SPACE:
+                player.jump()  # Стрибок
+
+        elif event.type == pygame.KEYUP:
+            # Відпускання кнопок
+            if event.key in (pygame.K_d, pygame.K_a):
+                player_forward = 0  # Зупинка
+
+    player.apply_gravity()
+    player.move(player_forward)
+
+    # Перевірка зіткнення з порталом
+    if player.rect.colliderect(portal.rect):
+        if current_level < len(backgrounds) - 1:
+            current_level += 1  # Перехід на наступний рівень
+            player.rect.x = 0  # Гравець повертається на старт
+        else:
+            print("Вітаємо! Ви пройшли всі рівні!")  # Кінець гри
+            start = False
+
+    pygame.display.flip()
+    clock.tick(100)
+
+pygame.quit()
