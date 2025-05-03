@@ -1,0 +1,249 @@
+import pygame
+import random
+pygame.init()
+
+pygame.display.set_caption("First Game")
+WIDTH, HEIGHT = 1280, 720
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+
+background = pygame.image.load("background.jpg")
+background = pygame.transform.scale(background, (WIDTH, HEIGHT))
+
+font = pygame.font.Font(None, 50)
+clock = pygame.time.Clock()
+
+GRAVITY = 1
+JUMP_POWER = -17
+GROUND_Y = 350
+
+score = 0
+game_active = False
+show_rules = True
+game_won = False
+game_lost = False
+
+class GameObject():
+    def __init__(self, filename, x=0, y=0, width=10, height=10):
+        self.image_right = pygame.image.load(filename)
+        self.image_right = pygame.transform.scale(self.image_right, (width, height))
+        self.image_left = pygame.transform.flip(self.image_right, True, False)
+        self.image = self.image_right
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.facing_right = True
+        self.velocity_y = 0 
+        self.isJumping = False 
+
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+    def move(self, dx):
+        self.rect.x += dx
+        if dx > 0:
+            self.image = self.image_right
+            self.facing_right = True
+        if dx < 0:
+            self.image = self.image_left
+            self.facing_right = False
+
+    def apply_gravity(self):
+        self.velocity_y += GRAVITY 
+        self.rect.y += self.velocity_y
+        if self.rect.y >= GROUND_Y:
+            self.rect.y = GROUND_Y
+            self.velocity_y = 0
+            self.isJumping = False
+    
+    def jump(self):
+        if not self.isJumping:
+            self.velocity_y = JUMP_POWER
+            self.isJumping = True 
+
+class Coin():
+    def __init__(self, x, y):
+        self.image = pygame.image.load("good_coin.png")
+        self.image = pygame.transform.scale(self.image, (125, 100))
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.velocity_y = 0
+        self.falling = False
+        self.timer = random.randint(1000, 2600)
+        self.start_time = pygame.time.get_ticks()
+
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+    def update(self):
+        current_time = pygame.time.get_ticks()
+        if not self.falling and current_time - self.start_time >= self.timer:
+            self.falling = True
+        if self.falling:
+            self.velocity_y += GRAVITY
+            self.rect.y += self.velocity_y
+
+    def has_hit_ground(self):
+        return self.rect.y >= 500
+
+def spawn_coin():
+    x = random.randint(0, WIDTH - 40)
+    y = random.randint(0, 100)
+    return Coin(x, y)
+
+class BedCoin():
+    def __init__(self, x, y):
+        self.image = pygame.image.load("bed_coin.png")
+        self.image = pygame.transform.scale(self.image, (50, 50))
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.velocity_y = 0
+        self.falling = False
+        self.timer = random.randint(1000, 2600)
+        self.start_time = pygame.time.get_ticks()
+
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+    def update(self):
+        current_time = pygame.time.get_ticks()
+        if not self.falling and current_time - self.start_time >= self.timer:
+            self.falling = True
+        if self.falling:
+            self.velocity_y += GRAVITY
+            self.rect.y += self.velocity_y
+
+    def has_hit_ground(self):
+        return self.rect.y >= 500
+    
+def spawn_bedcoin():
+    x = random.randint(0, WIDTH - 40)
+    y = random.randint(0, 100)
+    return BedCoin(x, y)
+
+def show_text_centered(lines, color="white"):
+    screen.fill("black")
+    for i, line in enumerate(lines):
+        rendered = font.render(line, True, color)
+        rect = rendered.get_rect(center=(WIDTH//2, HEIGHT//2 - 40 + i * 60))
+        screen.blit(rendered, rect)
+
+def restart_game():
+    global coins, bedcoins, score, game_active, game_won, game_lost
+    score = 0
+    coins = [spawn_coin()]
+    bedcoins = [spawn_bedcoin()]
+    player.rect.x = 0
+    player.rect.y = 330
+    game_active = True
+    game_won = False
+    game_lost = False
+
+player = GameObject("player.png", 0, 330, 300, 230)
+player_forward = 0
+
+coins = [spawn_coin()]
+bedcoins = [spawn_bedcoin()]
+
+running = True
+while running:
+    screen.fill("black")
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        
+        elif event.type == pygame.KEYDOWN:
+            if show_rules:
+                show_rules = False
+                restart_game()
+            elif game_won or game_lost:
+                if event.key == pygame.K_e:
+                    restart_game()
+            elif game_active:
+                if event.key == pygame.K_d:
+                    player_forward = 5
+                elif event.key == pygame.K_a:
+                    player_forward = -5
+                elif event.key == pygame.K_SPACE:
+                    player.jump()
+
+        elif event.type == pygame.KEYUP:
+            if event.key in (pygame.K_d, pygame.K_a):
+                player_forward = 0
+
+    if show_rules:
+        show_text_centered([
+            "ПРАВИЛА:",
+            "- Збирай золоті монетки (+1 бал)",
+            "- Уникай поганих монеток (-1 бал)",
+            "- Збери 10 монет — ти виграв!",
+            "- Якщо рахунок -5 — програв.",
+            "Натисни будь-яку клавішу, щоб почати..."
+        ])
+    
+    elif game_won:
+        show_text_centered([
+            "ВИ ВИГРАЛИ!",
+            "🎉 Вітаємо! 🎉"
+        ], color="green")
+
+    elif game_lost:
+        show_text_centered([
+            "ВИ ПРОГРАЛИ!",
+            "Натисніть 'E' щоб почати спочатку."
+        ], color="red")
+
+    elif game_active:
+        screen.blit(background, (0, 0))
+        player.draw()
+
+        text = font.render(f"Кількість монет: {score}", True, "black")
+        screen.blit(text, (20, 20))
+
+        for coin in coins:
+            coin.draw()
+            coin.update()
+        for bedcoin in bedcoins:
+            bedcoin.draw()
+            bedcoin.update()
+
+        player.apply_gravity()
+        player.move(player_forward)
+
+        # Обробка зіткнень
+        coins_to_remove = []
+        for coin in coins:
+            if player.rect.colliderect(coin.rect):
+                score += 1
+                coins_to_remove.append(coin)
+            elif coin.has_hit_ground():
+                coins_to_remove.append(coin)
+        for coin in coins_to_remove:
+            coins.remove(coin)
+            coins.append(spawn_coin())
+
+        bedcoins_to_remove = []
+        for bedcoin in bedcoins:
+            if player.rect.colliderect(bedcoin.rect):
+                score -= 1
+                bedcoins_to_remove.append(bedcoin)
+            elif bedcoin.has_hit_ground():
+                bedcoins_to_remove.append(bedcoin)
+        for bedcoin in bedcoins_to_remove:
+            bedcoins.remove(bedcoin)
+            bedcoins.append(spawn_bedcoin())
+
+        # Умови завершення
+        if score >= 10:
+            game_active = False
+            game_won = True
+        elif score <= -5:
+            game_active = False
+            game_lost = True
+
+    pygame.display.flip()
+    clock.tick(60)
+
+pygame.quit()
