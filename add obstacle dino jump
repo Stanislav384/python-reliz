@@ -1,0 +1,100 @@
+import pygame
+from random import *
+pygame.init()
+
+WIDTH, HEIGHT = 1280, 720
+pygame.display.set_caption("Dino Runner")
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+
+background = pygame.image.load("background.jpg")
+background = pygame.transform.scale(background, (WIDTH, HEIGHT))
+
+GRAVITY = 1.25
+JUMP_POWER = -20
+GROUND_Y = HEIGHT - 150
+
+
+class GameObject():
+    def __init__(self, filename, x=0, y=0, width=10, height=10):
+        self.image_right = pygame.image.load(filename)
+        self.image_right = pygame.transform.scale(self.image_right, (width, height))
+        self.image_left = pygame.transform.flip(self.image_right, True, False)
+        self.image = self.image_right
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.facing_right = True
+        self.velocity_y = 0
+        self.jumping = False
+
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+    def apply_gravity(self):
+        self.velocity_y += GRAVITY
+        self.rect.y += self.velocity_y
+        if self.rect.y >= GROUND_Y:
+            self.rect.y = GROUND_Y
+            self.velocity_y = 0
+            self.jumping = False
+
+    def jump(self):
+        if not self.jumping:
+            self.velocity_y = JUMP_POWER
+            self.jumping = True
+
+
+class Cactus(GameObject):
+    def __init__(self):
+        width = 20
+        height = 40
+        x = WIDTH + randint(0, 500)  # Разнеси появление
+        y = GROUND_Y - height
+        super().__init__("cactus.png", x, y, width, height)
+        self.speed = randint(4, 7)
+
+    def update(self):
+        self.rect.x -= self.speed
+        if self.rect.x < -self.rect.width:
+            self.rect.x = WIDTH + randint(300, 600)
+            return True
+        return False
+
+
+clock = pygame.time.Clock()
+player = GameObject("dino.png", WIDTH // 4, GROUND_Y - 100, 50, 50)
+
+# 🟩 Добавляем два кактуса
+obstacles = [Cactus(), Cactus()]
+
+score = 0
+player_velocity_x = 0
+start = True
+
+while start:
+    screen.blit(background, (0, 0))
+    player.draw()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            start = False
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:
+                player.jump()
+
+    for obstacle in obstacles:
+        if player.rect.colliderect(obstacle.rect):
+            print("Game Over!")
+            pygame.time.delay(1000)
+            start = False
+        if obstacle.update():
+            score += 1
+
+    for obstacle in obstacles:
+        obstacle.draw()
+
+    player.apply_gravity()
+    pygame.display.flip()
+    clock.tick(60)
+
+pygame.quit()
