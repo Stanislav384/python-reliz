@@ -1,0 +1,119 @@
+import pygame
+pygame.init()
+
+#настройка вкина програми
+WIDTH, HEIGHT = 1200, 720
+pygame.display.set_caption("super mario console colaps")
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+background = pygame.image.load("sky_level_1_background.png")
+background = pygame.transform.scale(background, (WIDTH, HEIGHT))
+
+# не чіпати!
+clock = pygame.time.Clock()
+
+# === ДОДАНО: Шрифт для правил ===
+font = pygame.font.Font(None, 48)
+
+# === ДОДАНО: функція показу правил ===
+def show_rules_screen(lines):
+    screen.fill("black")
+    for i, line in enumerate(lines):
+        rendered = font.render(line, True, "white")
+        rect = rendered.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 100 + i * 60))
+        screen.blit(rendered, rect)
+    pygame.display.flip()
+
+# === ДОДАНО: показати правила перед грою ===
+showing_rules = True
+while showing_rules:
+    show_rules_screen([
+        "ПРАВИЛА ГРИ:",
+        "- Керуй Маріо стрілками ← →",
+        "- Стрибай клавішею [ПРОБІЛ]",
+        "- Збери всі монетки і уникай пасток!",
+        "Натисни будь-яку клавішу для старту..."
+    ])
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            exit()
+        elif event.type == pygame.KEYDOWN:
+            showing_rules = False
+
+# === Клас гравця ===
+class GameObject():
+    def __init__(self, filename, x=0, y=0, wiidth=10, height=10):
+        self.image_right = pygame.image.load(filename)
+        self.image_right = pygame.transform.scale(self.image_right, (wiidth, height))
+        self.image_left = pygame.transform.flip(self.image_right, True, False)
+        self.image = self.image_right
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.facing_right = True
+        self.velocity_y = 0
+        self.isJumping = False
+
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+    def move(self, dx):
+        self.rect.x += dx
+        if dx > 0:
+            self.image = self.image_right
+            self.facing_right = True
+        elif dx < 0:
+            self.image = self.image_left
+            self.facing_right = False
+
+    def apply_gravity(self):
+        self.velocity_y += GRAVITY 
+        self.rect.y += self.velocity_y
+
+        if self.rect.y >= GROUND_Y:
+            self.rect.y = GROUND_Y
+            self.velocity_y = 0
+            self.isJumping = False
+    
+    def jump(self):
+        if not self.isJumping:
+            self.velocity_y = JUMP_POWER
+            self.isJumping = True
+
+# Позиція і параметри гравця
+player_x = 0
+player_y = 630
+player_forward = 5
+GRAVITY = 1
+JUMP_POWER = -20
+GROUND_Y = 630
+
+player = GameObject("mario_stop.png", player_x, player_y, 48, 60)
+
+# Основний цикл гри
+start = True
+while start:
+    screen.blit(background, (0, 0))
+    player.draw()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            start = False
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_RIGHT:
+                player_forward = 5
+            elif event.key == pygame.K_LEFT:
+                player_forward = -5
+            elif event.key == pygame.K_SPACE:
+                player.jump()
+
+        elif event.type == pygame.KEYUP:
+            if event.key in (pygame.K_RIGHT, pygame.K_LEFT):
+                player_forward = 0
+
+    player.apply_gravity()
+    player.move(player_forward)
+    pygame.display.flip()
+    clock.tick(60)
+
+pygame.quit()
