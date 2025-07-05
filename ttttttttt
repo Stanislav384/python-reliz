@@ -1,0 +1,37 @@
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication, QWidget,  QPushButton, QVBoxLayout, QLabel, QHBoxLayout, QMessageBox, QRadioButton
+
+
+app = QApplication([])
+
+main_win = QWidget()
+main_win.resize(600, 400)
+main_win.setWindowTitle("Запитання-відповідь")
+main_win.show()
+
+question = QLabel("Якого року канал отримав «золоту кнопку» від YouTube?")
+ans_1 = QRadioButton("2005")
+ans_2 = QRadioButton("2010")
+ans_3 = QRadioButton("2015")
+ans_4 = QRadioButton("2020")
+
+layout_main = QVBoxLayout() #ВЕРТИКАЛЬНА ЛІНІЯ (ВОНА ДАЄ ЗМОГУ ПОКАЗУВАТИ ВСЕ ЗВЕРХУ ВНИЗ!)
+layout_h1 = QHBoxLayout()
+layout_h2 = QHBoxLayout()
+layout_h3 = QHBoxLayout()
+# --------------------------------------------------------
+layout_h1.addWidget(question, alignment=Qt.AlignCenter)
+
+layout_h2.addWidget(ans_1, alignment=Qt.AlignCenter)
+layout_h2.addWidget(ans_2, alignment=Qt.AlignCenter)
+
+layout_h3.addWidget(ans_3, alignment=Qt.AlignCenter)
+layout_h3.addWidget(ans_4, alignment=Qt.AlignCenter)
+
+layout_main.addLayout(layout_h1)
+layout_main.addLayout(layout_h2)
+layout_main.addLayout(layout_h3)
+# СПІЛНА ЛІНІЯ З ВІДЖЕТАМИ ТААА ГОРИЗОНТАЛЬНИМИ ЛІНІЯМИ
+main_win.setLayout(layout_main)
+
+app.exec_()
