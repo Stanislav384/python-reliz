@@ -1,0 +1,68 @@
+import pygame
+pygame.init()
+from random import randint
+
+WIDTH, HEIGHT = 1200, 800  #800, 600
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+background = pygame.image.load("image.jpg")
+background = pygame.transform.scale(background,(WIDTH, HEIGHT))
+clock = pygame.time.Clock()
+pygame.display.set_caption("Clicker beta")
+
+# 3.........ЛОГИКА
+class GameObject():
+    def __init__(self, filename, x=0, y=0, width=10, height=10):
+        self.image_right = pygame.image.load(filename)
+        self.image_right = pygame.transform.scale(self.image_right, (width, height))
+        self.image_left = pygame.transform.flip(self.image_right, True, False)
+        self.image = self.image_right
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.facing_right = True
+    
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+    def move(self, dx):
+        self.rect.x += dx
+        if dx > 0:
+            self.image = self.image_right
+            self.facing_right = True
+        elif dx < 0:
+            self.image = self.image_left
+            self.facing_right = False
+# 4...... ПАРАМЕТРЫ И СОЗДАНИЕ ОБЪЕКТОВ (ИГРОКИ И ИХ НАСТРОЙКИ К ПРИМЕРУ)
+start = True
+
+# Гравець перший
+player_x = 0
+player_y = 0
+player_idle = 0
+player1 = GameObject("player.png", player_x, player_y,110, 110)
+
+
+# 5. ЦИКЛ ПРОГРАММЫ
+while start:
+    screen.blit(background, (0,0))
+    player1.draw()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            start = False
+        if event.type == pygame.KEYDOWN:
+            # Перший гравець клавіша натиснута
+            if event.key == pygame.K_RIGHT:
+                player_idle = 5
+            if event.key == pygame.K_LEFT:
+                player_idle = -5
+        if event.type == pygame.KEYUP:
+            # Перший гравець - клавіша відпущена
+            if event.key in (pygame.K_RIGHT, pygame.K_LEFT):
+                player_idle = 0
+    
+    player1.move(player_idle)
+    
+    pygame.display.flip()
+    clock.tick(60)
+pygame.quit()
