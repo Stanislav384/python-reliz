@@ -1,0 +1,97 @@
+import pygame
+import random
+
+# 1. Ініціалізація Pygame
+pygame.init()
+
+# 2. Налаштування екрану
+screen_width = 600
+screen_height = 400
+screen = pygame.display.set_mode((screen_width, screen_height))
+pygame.display.set_caption("Проста гра з літерами")
+
+# 3. Кольори та шрифти
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+
+font = pygame.font.Font(None, 150) # Великий шрифт для літери
+small_font = pygame.font.Font(None, 40) # Маленький шрифт для повідомлень
+
+# 4. Список літер для гри (український алфавіт без апострофа, м'якого знаку та літер "Ї", "Є", "Ґ", бо вони можуть бути складнішими для обробки з клавіатури напряму)
+# Можна додати й інші літери, якщо потрібна повна підтримка.
+letters = "abcdefghijklmnopqrstuvwxyz"
+
+# 5. Ігрові змінні
+current_letter = ''
+message = "Натисни будь-яку літеру!"
+message_color = BLACK
+
+# --- Функції ---
+
+def generate_new_letter():
+    """Обирає випадкову літеру."""
+    return random.choice(letters)
+
+def display_text(text, font, color, x, y):
+    """Відображає текст на екрані."""
+    text_surface = font.render(text, True, color)
+    text_rect = text_surface.get_rect(center=(x, y))
+    screen.blit(text_surface, text_rect)
+
+# 6. Починаємо гру - генеруємо першу літеру
+current_letter = generate_new_letter()
+
+# 7. Ігровий цикл
+running = True
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        if event.type == pygame.KEYDOWN: # Якщо натиснуто клавішу
+            # Отримуємо ім'я натиснутої клавіші (наприклад, "a", "б", "space")
+            # Важливо: Pygame часто повертає латинські символи для клавіш,
+            # навіть якщо у вас українська розкладка.
+            # Для коректної роботи з українськими літерами потрібен буде більш складний механізм,
+            # що враховує поточну розкладку клавіатури, або порівнювати event.unicode.
+            # Наразі, цей приклад очікує, що ви натискаєте клавішу, яка відповідає латинському аналогу.
+            # Наприклад, для літери "А" (укр) треба буде натиснути "А" (англ).
+            pressed_key_name = pygame.key.name(event.key)
+
+            # Перевіряємо, чи є натиснута клавіша однією літерою та алфавітною
+            # Порівнюємо натиснуту клавішу (змінивши її на нижній регістр) з поточною літерою
+            # Ця частина може потребувати доопрацювання для повноцінної підтримки української розкладки
+            # безпосередньо через event.unicode, якщо 'pressed_key_name' не дає бажаного результату.
+            
+            # Для більш точної обробки українських літер можна використовувати event.unicode:
+            # pressed_char = event.unicode.lower()
+            # if pressed_char.isalpha() and pressed_char in letters:
+            #     if pressed_char == current_letter:
+            #         ...
+            # Цей варіант 'event.unicode' буде коректніше обробляти літери відповідно до поточної розкладки.
+            # Я залишив 'pygame.key.name' як у простому прикладі, але з коментарем про 'event.unicode'.
+
+            if len(pressed_key_name) == 1 and pressed_key_name.isalpha():
+                if pressed_key_name.lower() == current_letter: # Порівнюємо натиснуту клавішу з літерою
+                    message = "Правильно! Нова літера!"
+                    message_color = GREEN
+                    current_letter = generate_new_letter() # Генеруємо нову літеру
+                else:
+                    message = "Неправильно! Спробуй ще раз."
+                    message_color = RED
+            else:
+                message = "Натисни літеру!"
+                message_color = BLACK
+
+    # 8. Відображення всього на екрані
+    screen.fill(WHITE) # Очищаємо екран білим кольором
+
+    # Відображаємо поточну літеру (заголовною, щоб було видно)
+    display_text(current_letter.upper(), font, BLACK, screen_width // 2, screen_height // 2 - 50)
+
+    # Відображаємо повідомлення
+    display_text(message, small_font, message_color, screen_width // 2, screen_height // 2 + 50)
+
+    pygame.display.flip()
+pygame.quit()
