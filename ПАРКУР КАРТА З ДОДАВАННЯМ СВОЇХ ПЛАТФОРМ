@@ -1,0 +1,138 @@
+import pygame
+from random import randint
+
+pygame.init()
+
+WIDTH, HEIGHT = 1200, 800
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+background = pygame.image.load("background.png")
+background = pygame.transform.scale(background, (WIDTH, HEIGHT))
+clock = pygame.time.Clock()
+pygame.display.set_caption("Clicker beta")
+
+# 1. Добавление класса для платформ (наследует от GameObject)
+class Platform(pygame.sprite.Sprite):
+    def __init__(self, x, y, width, height, filename):
+        super().__init__()
+        self.image = pygame.image.load(filename)
+        self.image = pygame.transform.scale(self.image, (width, height))
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+    
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+
+# 2. Изменение класса GameObject для проверки столкновений
+class GameObject():
+    def __init__(self, filename, x=0, y=0, width=10, height=10):
+        self.image_right = pygame.image.load(filename)
+        self.image_right = pygame.transform.scale(self.image_right, (width, height))
+        self.image_left = pygame.transform.flip(self.image_right, True, False)
+        self.image = self.image_right
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.facing_right = True
+        self.velocity = 0
+        self.isJumping = False
+        self.on_ground = True  # Новый флаг для проверки, находится ли персонаж на земле/платформе
+    
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+    def move(self, dx):
+        self.rect.x += dx
+        if dx > 0:
+            self.image = self.image_right
+            self.facing_right = True
+        elif dx < 0:
+            self.image = self.image_left
+            self.facing_right = False
+
+    def apply_gravity(self, platforms):
+        self.velocity += GRAVITY
+        self.rect.y += self.velocity
+        
+        # Проверяем столкновение с каждой платформой
+        for platform in platforms:
+            if self.rect.colliderect(platform.rect):
+                # Если персонаж падал и столкнулся сверху
+                if self.velocity > 0:
+                    self.rect.bottom = platform.rect.top
+                    self.velocity = 0
+                    self.isJumping = False
+                    self.on_ground = True
+                    return  # Выходим, так как нашли платформу для приземления
+
+        # Проверяем столкновение с основным полом (GROUND_Y)
+        if self.rect.y >= GROUND_Y:
+            self.rect.y = GROUND_Y 
+            self.velocity = 0
+            self.isJumping = False
+            self.on_ground = True
+
+
+    def jump(self):
+        if self.on_ground:  # Проверяем, находится ли персонаж на чем-то твердом
+            self.velocity = JUMP_FORCE
+            self.isJumping = True
+            self.on_ground = False
+
+
+# 3. Параметры и создание объектов (добавляем платформы)
+start = True
+
+GRAVITY = 1
+GROUND_Y = 450
+JUMP_FORCE = -20 
+
+player_x = 0
+player_y = 450
+player_idle = 0
+player1 = GameObject("player.png", player_x, player_y, 300, 300)
+
+# Создаем список с платформами
+platforms = []
+(*                         x       y     width    heogjt   картинка платформи*)
+platforms.append(Platform(500,    350,    200,      50,     "platform.png")) # Первая платформа
+
+
+platforms.append(Platform(800, 250, 250, 50, "platform.png")) # Вторая платформа
+platforms.append(Platform(100, 200, 150, 50, "platform.png")) # Третья платформа
+
+
+# 4. Цикл программы (добавляем отрисовку платформ)
+while start:
+    screen.blit(background, (0,0))
+    
+    # Отрисовываем каждую платформу из списка
+    for platform in platforms:
+        platform.draw()
+
+    player1.draw()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            start = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_RIGHT:
+                player_idle = 5
+            if event.key == pygame.K_LEFT:
+                player_idle = -5
+            if event.key == pygame.K_SPACE:
+                player1.jump()
+            
+        if event.type == pygame.KEYUP:
+            if event.key in (pygame.K_RIGHT, pygame.K_LEFT):
+                player_idle = 0
+    
+    player1.move(player_idle)
+    
+    # Передаем список платформ в метод apply_gravity
+    player1.apply_gravity(platforms)
+    
+    pygame.display.flip()
+    clock.tick(60)
+pygame.quit()
