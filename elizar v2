@@ -1,0 +1,90 @@
+import pygame
+import random
+
+# 1. Ініціалізація Pygame
+pygame.init()
+
+# 2. Налаштування екрану
+pygame.display.set_caption("randomize")
+screen_width = 600
+screen_height = 300
+screen = pygame.display.set_mode((screen_width, screen_height))
+background = pygame.image.load("2dgamebackground.jpg")
+clock = pygame.time.Clock()
+
+class GameObject():
+    def __init__(self, filename, x = 0, y = 0, width = 10, height = 10):
+        self.image = pygame.image.load(filename)
+        self.image = pygame.transform.scale(self.image, (width, height))
+        self.rect = self.image.get_rect()
+        self.rect.x = x 
+        self.rect.y = y
+    
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+
+player_x = 0
+player_y = 350
+player_forward = 0
+player = GameObject("player.png", player_x, player_y, 300, 230)
+
+boss_x = 700
+boss_y = 350
+boss_forward = 0
+boss = GameObject("boss.png", boss_x, boss_y, 300, 230)
+
+
+
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+
+font = pygame.font.Font(None, 150)
+small_font = pygame.font.Font(None, 40) 
+
+letters = "abcdefghijklmnopqrstuvwxyz"
+current_letter = ''
+message = "Натисни будь-яку літеру!"
+message_color = BLACK
+
+def generate_new_letter():
+    """Обирає випадкову літеру."""
+    return random.choice(letters)
+
+def display_text(text, font, color, x, y):
+    """Відображає текст на екрані."""
+    text_surface = font.render(text, True, color)
+    text_rect = text_surface.get_rect(center=(x, y))
+    screen.blit(text_surface, text_rect)
+current_letter = generate_new_letter()
+
+
+running = True
+while running:
+    screen.blit(background,(0, 0))
+    player.draw()
+    boss.draw()
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        if event.type == pygame.KEYDOWN:
+            pressed_key_name = pygame.key.name(event.key)
+            if len(pressed_key_name) == 1 and pressed_key_name.isalpha():
+                if pressed_key_name.lower() == current_letter: 
+                    message = "Правильно! Нова літера!"
+                    message_color = GREEN
+                    current_letter = generate_new_letter() 
+                else:
+                    message = "Неправильно! Спробуй ще раз."
+                    message_color = RED
+            else:
+                message = "Натисни літеру!"
+                message_color = BLACK
+    
+    display_text(current_letter.upper(), font, BLACK, screen_width // 2, screen_height // 2 - 50)
+    display_text(message, small_font, message_color, screen_width // 2, screen_height // 2 + 50)
+    pygame.display.flip()
+    clock.tick(100)
+pygame.quit()
