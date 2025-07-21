@@ -95,7 +95,7 @@ player1 = GameObject("player.png", player_x, player_y, 300, 300)
 
 # Создаем список с платформами
 platforms = []
-(*                         x       y     width    heogjt   картинка платформи*)
+(*                         x       y     width    height   картинка платформи*)
 platforms.append(Platform(500,    350,    200,      50,     "platform.png")) # Первая платформа
 
 
