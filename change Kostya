@@ -1,0 +1,87 @@
+# 1. Добавление класса для платформ (наследует от GameObject)
+class Platform(pygame.sprite.Sprite):
+    def __init__(self, x, y, width, height, filename):
+        super().__init__()
+        self.image = pygame.image.load(filename)
+        self.image = pygame.transform.scale(self.image, (width, height))
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+    
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+
+# 2. Изменение класса GameObject для проверки столкновений
+class GameObject():
+    def __init__(self, filename, x=0, y=0, width=10, height=10):
+        self.image_right = pygame.image.load(filename)
+        self.image_right = pygame.transform.scale(self.image_right, (width, height))
+        self.image_left = pygame.transform.flip(self.image_right, True, False)
+        self.image = self.image_right
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.facing_right = True
+        self.velocity = 0
+        self.isJumping = False
+        self.on_ground = True  # Новый флаг для проверки, находится ли персонаж на земле/платформе
+    
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+    def move(self, dx, platforms): # Modified to take platforms
+        self.rect.x += dx
+        
+        # Check for horizontal collisions with platforms
+        for platform in platforms:
+            if self.rect.colliderect(platform.rect):
+                if dx > 0: # Moving right, hit left side of platform
+                    self.rect.right = platform.rect.left
+                elif dx < 0: # Moving left, hit right side of platform
+                    self.rect.left = platform.rect.right
+                # If a horizontal collision occurs, stop horizontal movement
+                dx = 0 # This line isn't strictly necessary here as we just adjust rect.x,
+                       # but good for conceptual understanding that movement stops.
+
+        if dx > 0:
+            self.image = self.image_right
+            self.facing_right = True
+        elif dx < 0:
+            self.image = self.image_left
+            self.facing_right = False
+
+    def apply_gravity(self, platforms):
+        self.velocity += GRAVITY
+        self.rect.y += self.velocity
+        
+        self.on_ground = False # Assume not on ground until proven otherwise
+
+        # Проверяем столкновение с каждой платформой
+        for platform in platforms:
+            if self.rect.collidereect(platform.rect):
+                # If falling and hit top of platform
+                if self.velocity >= 0: # Use >= to cover cases where velocity is 0 but still on ground
+                    self.rect.bottom = platform.rect.top
+                    self.velocity = 0
+                    self.isJumping = False
+                    self.on_ground = True
+                # If jumping up and hit bottom of platform
+                elif self.velocity < 0:
+                    self.rect.top = platform.rect.bottom
+                    self.velocity = 0 # Stop upward movement
+                return  # Выходим, так как нашли платформу для приземления
+
+        # Проверяем столкновение с основным полом (GROUND_Y)
+        if self.rect.y >= GROUND_Y:
+            self.rect.y = GROUND_Y 
+            self.velocity = 0
+            self.isJumping = False
+            self.on_ground = True
+
+
+    def jump(self):
+        if self.on_ground:  # Проверяем, находится ли персонаж на чем-то твердом
+            self.velocity = JUMP_FORCE
+            self.isJumping = True
+            self.on_ground = False
