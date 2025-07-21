@@ -1,0 +1,144 @@
+import pygame
+import math # Імпортуємо модуль math для математичних розрахунків
+
+pygame.init()
+pygame.mixer.init()
+
+# налаштування вікна
+WIDTH, HEIGHT = 1280, 720
+pygame.display.set_caption("clicker")
+screen = pygame.display.set_mode((WIDTH, HEIGHT)) #розмір вікна
+#фон
+background = pygame.image.load("background.png") # Переконайтеся, що файл background.png є у вашій директорії
+background = pygame.transform.scale(background, (WIDTH,HEIGHT))
+
+clock = pygame.time.Clock()
+
+# --- Клас GameObject (базовий клас для гравця та інших об'єктів) ---
+class GameObject():
+    def __init__(self, filename, x=0, y=0, width=10, height=10):
+        # Завантажуємо та масштабуємо оригінальне зображення
+        self.original_image = pygame.image.load(filename)
+        self.original_image = pygame.transform.scale(self.original_image, (width, height))
+        self.image = self.original_image # Поточне зображення для відображення
+        self.rect = self.image.get_rect() # Прямокутник для позиціонування та колізій
+        self.rect.x = x
+        self.rect.y = y
+        self.facing_right = True # Для визначення напрямку, куди дивиться об'єкт (корисно для гравця)
+
+    def draw(self):
+        # Відображаємо об'єкт на екрані
+        screen.blit(self.image, self.rect)
+
+    def move(self, dx, dy):
+        # Переміщуємо об'єкт
+        self.rect.x += dx
+        self.rect.y += dy
+        # Логіка для перевертання зображення гравця при зміні напрямку руху
+        if dx > 0 and not self.facing_right:
+            self.image = pygame.transform.flip(self.original_image, False, False)
+            self.facing_right = True
+        elif dx < 0 and self.facing_right:
+            self.image = pygame.transform.flip(self.original_image, True, False)
+            self.facing_right = False
+
+# --- Клас Bullet (Куля) ---
+class Bullet(GameObject):
+    def __init__(self, filename, x, y, target_x, target_y, speed, width=20, height=10):
+        # Викликаємо конструктор базового класу GameObject
+        super().__init__(filename, x, y, width, height)
+        self.speed = speed # Швидкість руху кулі
+
+        # Обчислюємо вектор напрямку від початкової позиції кулі до позиції миші
+        dx, dy = target_x - x, target_y - y
+        distance = math.sqrt(dx**2 + dy**2) # Обчислюємо відстань (довжину вектора)
+
+        if distance == 0: # Уникаємо ділення на нуль, якщо миша точно на гравці
+            self.direction_x = 0
+            self.direction_y = 0
+        else:
+            # Нормалізуємо вектор напрямку, щоб отримати одиничний вектор.
+            # Це забезпечує постійну швидкість кулі незалежно від відстані до курсору.
+            self.direction_x = dx / distance
+            self.direction_y = dy / distance
+
+        # Обчислюємо кут для повороту кулі.
+        # math.atan2 повертає кут у радіанах. Перетворюємо його в градуси.
+        # Мінус перед self.direction_y потрібен, тому що в Pygame вісь Y зростає вниз.
+        self.angle = math.degrees(math.atan2(-self.direction_y, self.direction_x))
+        # Повертаємо оригінальне зображення кулі, щоб воно було спрямоване у напрямку руху
+        self.image = pygame.transform.rotate(self.original_image, self.angle)
+        # Оновлюємо прямокутник кулі після повороту, щоб її центр залишався на місці
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self):
+        # Оновлюємо позицію кулі відповідно до її напрямку та швидкості
+        self.rect.x += self.direction_x * self.speed
+        self.rect.y += self.direction_y * self.speed
+
+# --- Налаштування гравця ---
+player1_x = 0
+player1_y = 330
+player1_forward_x = 0
+player1_forward_y = 0
+# Створюємо об'єкт гравця. Переконайтеся, що файл player1.png є у вашій директорії
+player1 = GameObject("player1.png", player1_x, player1_y, 100, 70)
+
+# Список для зберігання всіх активних куль на екрані
+bullets = []
+bullet_speed = 10 # Швидкість, з якою рухатимуться кулі
+
+# --- Основний ігровий цикл ---
+start = True
+health = 6 # Змінна "здоров'я", яка не використовується в цьому прикладі, але присутня у вашому шаблоні
+while start:
+    screen.blit(background, (0,0)) # Малюємо фон на початку кожного кадру
+    player1.draw() # Малюємо гравця
+
+    # Обробка подій (натискання клавіш, рух миші тощо)
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            start = False # Якщо користувач закрив вікно, завершуємо гру
+
+        # Обробка натискання клавіш для руху гравця
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_d:
+                player1_forward_x = 5
+            elif event.key == pygame.K_a:
+                player1_forward_x = -5
+            elif event.key == pygame.K_w:
+                player1_forward_y = -5
+            elif event.key == pygame.K_s:
+                player1_forward_y = 5
+
+        # Обробка відпускання клавіш для зупинки руху гравця
+        elif event.type == pygame.KEYUP:
+            if event.key in (pygame.K_d, pygame.K_a):
+                player1_forward_x = 0
+            if event.key in (pygame.K_w, pygame.K_s):
+                player1_forward_y = 0
+
+        # Обробка натискання кнопки миші для стрільби
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1: # 1 означає ліву кнопку миші
+                mouse_x, mouse_y = event.pos # Отримуємо координати курсору миші
+                # Створюємо нову кулю в центрі гравця, спрямовану на курсор миші.
+                # Переконайтеся, що файл bullet.png є у вашій директорії
+                new_bullet = Bullet("bullet.png", player1.rect.centerx, player1.rect.centery,
+                                    mouse_x, mouse_y, bullet_speed, width=20, height=10) # Вказуємо розміри кулі
+                bullets.append(new_bullet) # Додаємо нову кулю до списку активних куль
+
+    # Оновлення та відображення всіх куль
+    # Створюємо копію списку (list(bullets)), щоб безпечно видаляти елементи під час ітерації
+    for bullet in list(bullets):
+        bullet.update() # Оновлюємо позицію кулі
+        bullet.draw() # Малюємо кулю на екрані
+        # Видаляємо кулі, які вийшли за межі екрану, щоб уникнути накопичення об'єктів та проблем з продуктивністю
+        if not screen.get_rect().colliderect(bullet.rect):
+            bullets.remove(bullet)
+
+    player1.move(player1_forward_x, player1_forward_y) # Рухаємо гравця
+    clock.tick(60) # Обмежуємо частоту кадрів до 60 FPS
+    pygame.display.flip() # Оновлюємо весь екран, щоб відобразити зміни
+
+pygame.quit() # Завершуємо роботу Pygame після виходу з ігрового циклу
