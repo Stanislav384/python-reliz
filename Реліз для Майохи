@@ -1,0 +1,142 @@
+import pygame
+from random import randint, choice
+
+pygame.init()
+
+WIDTH, HEIGHT = 600, 800
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+background = pygame.image.load("BackgroundMINER.png")
+background = pygame.transform.scale(background, (WIDTH, HEIGHT))
+clock = pygame.time.Clock()
+pygame.display.set_caption("MinerLVL")
+
+# Block types and their filenames
+BLOCK_TYPES = [
+    "Iron_block.png",
+    "Stone_Block.png",
+    "Diamond_Block.png",
+    "Dirt_Block.png"
+]
+
+# 1. Добавление класса для платформ (наследует от pygame.sprite.Sprite)
+class Platform(pygame.sprite.Sprite):
+    def __init__(self, x, y, width, height, filename):
+        super().__init__()
+        self.image = pygame.image.load(filename)
+        self.image = pygame.transform.scale(self.image, (width, height))
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+    
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+# 2. Изменение класса GameObject для проверки столкновений
+class GameObject(pygame.sprite.Sprite):  # Inherit from pygame.sprite.Sprite for collision detection
+    def __init__(self, filename, x=0, y=0, width=10, height=10):
+        super().__init__()
+        self.image_right = pygame.image.load(filename)
+        self.image_right = pygame.transform.scale(self.image_right, (width, height))
+        self.image_left = pygame.transform.flip(self.image_right, True, False)
+        self.image = self.image_right
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.facing_right = True
+        self.velocity = 0
+        self.on_ground = True  # Новый флаг для проверки, находится ли персонаж на земле/платформе
+        self.is_falling = True # Flag to control if the pickaxe is falling
+
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+    def move(self, dx):
+        self.rect.x += dx
+        if dx > 0:
+            self.image = self.image_right
+            self.facing_right = True
+        elif dx < 0:
+            self.image = self.image_left
+            self.facing_right = False
+
+    def apply_gravity(self):
+        self.velocity += GRAVITY
+        self.rect.y += self.velocity
+        # Prevent going off-screen bottom (though we'll handle collisions differently now)
+        if self.rect.top > HEIGHT:
+            self.reset_position()
+
+    def reset_position(self):
+        # Reset pickaxe to a random X at the top of the screen
+        self.rect.x = randint(0, WIDTH - self.rect.width)
+        self.rect.y = 0
+        self.velocity = 0
+        self.is_falling = True
+
+# 3. Параметры и создание объектов (добавляем платформы)
+start = True
+
+GRAVITY = 1
+BLOCK_SIZE = 100 # Assuming blocks are 100x100
+ROWS_OF_BLOCKS = 3 # Number of rows of blocks at the bottom
+
+player_x = randint(0, WIDTH - 75) # Random initial X for the pickaxe
+player_y = 0
+player = GameObject("Wooden_Pickaxe.png", player_x, player_y, 75, 75)
+
+# Create a sprite group for platforms for easier collision detection and removal
+all_platforms = pygame.sprite.Group()
+
+def generate_new_row_of_blocks():
+    """Generates a new row of random blocks at the bottom."""
+    for i in range(WIDTH // BLOCK_SIZE):
+        block_filename = choice(BLOCK_TYPES)
+        # Place blocks at the very bottom, just above the visible screen
+        # We will shift existing blocks up to make room
+        new_block = Platform(i * BLOCK_SIZE, HEIGHT, BLOCK_SIZE, BLOCK_SIZE, block_filename)
+        all_platforms.add(new_block)
+
+def initial_block_generation():
+    """Generates the initial rows of blocks."""
+    for row in range(ROWS_OF_BLOCKS):
+        for col in range(WIDTH // BLOCK_SIZE):
+            block_filename = choice(BLOCK_TYPES)
+            all_platforms.add(Platform(col * BLOCK_SIZE, HEIGHT - (ROWS_OF_BLOCKS - row) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, block_filename))
+
+initial_block_generation()
+
+# Game loop
+while start:
+    screen.blit(background, (0,0))
+    
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            start = False
+        
+    # Apply gravity to the player (pickaxe)
+    if player.is_falling:
+        player.apply_gravity()
+
+    # Check for collisions between player and platforms
+    collided_blocks = pygame.sprite.spritecollide(player, all_platforms, False)
+    for block in collided_blocks:
+        # If the pickaxe is falling and hits a block from above
+        if player.velocity > 0 and player.rect.bottom <= block.rect.bottom:
+            all_platforms.remove(block) # Remove the hit block
+            player.reset_position() # Reset pickaxe position to top for a new fall
+            player.is_falling = True # Ensure it starts falling again
+
+            # Move all existing blocks up to fill the gap and add a new row at the bottom
+            for platform in all_platforms:
+                platform.rect.y -= BLOCK_SIZE # Move blocks up by one block size
+            generate_new_row_of_blocks() # Add a new random row at the bottom
+
+
+    # Draw all platforms
+    all_platforms.draw(screen) # Use all_platforms.draw() for convenience
+    player.draw()
+    
+    pygame.display.flip()
+    clock.tick(60)
+
+pygame.quit()
