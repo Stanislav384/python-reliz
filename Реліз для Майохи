@@ -52,7 +52,7 @@ class GameObject(pygame.sprite.Sprite):
         self.velocity_y += GRAVITY
         self.rect.y += self.velocity_y
         
-        # Если кирка ушла слишком далеко вниз (на случай, если нет блоков)
+        # Если кирка ушла слишком далеко вниз (на случай, если нет блоков), сбрасываем её
         if self.rect.top > HEIGHT:
             self.reset_position()
 
@@ -65,29 +65,26 @@ class GameObject(pygame.sprite.Sprite):
 # Параметры игры
 GRAVITY = 1.0 # Сила гравитации
 BLOCK_SIZE = 100 # Размер блоков (предполагаем 100x100)
-INITIAL_ROWS_OF_BLOCKS = 3 # Начальное количество видимых рядов блоков внизу
+VISIBLE_ROWS_OF_BLOCKS = 4 # Количество видимых рядов блоков на экране
 
 player = GameObject("Wooden_Pickaxe.png", randint(0, WIDTH - 75), 0, 75, 75)
 
 # Создаем группу спрайтов для платформ для удобства
 all_platforms = pygame.sprite.Group()
 
-def generate_new_row_of_blocks():
-    """Генерирует новый ряд случайных блоков и добавляет его в самый низ."""
+def generate_row_at_y(y_position):
+    """Генерирует новый ряд случайных блоков на заданной Y-позиции."""
     for i in range(WIDTH // BLOCK_SIZE):
         block_filename = choice(BLOCK_TYPES)
-        # Размещаем новый блок ниже видимой области экрана, чтобы он "появился" при сдвиге
-        new_block = Platform(i * BLOCK_SIZE, HEIGHT, BLOCK_SIZE, BLOCK_SIZE, block_filename)
+        new_block = Platform(i * BLOCK_SIZE, y_position, BLOCK_SIZE, BLOCK_SIZE, block_filename)
         all_platforms.add(new_block)
 
 def initial_block_generation():
     """Генерирует начальные ряды блоков, заполняя нижнюю часть экрана."""
-    for row in range(INITIAL_ROWS_OF_BLOCKS):
-        for col in range(WIDTH // BLOCK_SIZE):
-            block_filename = choice(BLOCK_TYPES)
-            # Размещаем блоки снизу вверх
-            y_pos = HEIGHT - (INITIAL_ROWS_OF_BLOCKS - row) * BLOCK_SIZE
-            all_platforms.add(Platform(col * BLOCK_SIZE, y_pos, BLOCK_SIZE, BLOCK_SIZE, block_filename))
+    for row in range(VISIBLE_ROWS_OF_BLOCKS):
+        # Размещаем блоки снизу вверх
+        y_pos = HEIGHT - (VISIBLE_ROWS_OF_BLOCKS - row) * BLOCK_SIZE
+        generate_row_at_y(y_pos)
 
 initial_block_generation()
 
@@ -115,8 +112,15 @@ while start:
         for platform in all_platforms:
             platform.rect.y -= BLOCK_SIZE # Двигаем вверх на высоту одного блока
         
-        # Генерируем новый ряд блоков в самом низу (который потом сдвинется)
-        generate_new_row_of_blocks()
+        # Удаляем блоки, которые ушли за верхнюю границу экрана
+        for platform in all_platforms.copy(): # Используем .copy() для безопасного удаления из группы во время итерации
+            if platform.rect.bottom < 0: # Если низ блока ушёл выше верхней границы экрана
+                all_platforms.remove(platform)
+        
+        # Генерируем новый ряд блоков в самом низу (который при следующем сдвиге станет видимым)
+        # Он должен быть на Y-позиции, которая будет чуть ниже текущего самого нижнего видимого блока,
+        # чтобы он "подъехал" на место
+        generate_row_at_y(HEIGHT - BLOCK_SIZE) # Новый ряд появляется прямо над нижней границей экрана
 
     # Отрисовываем все платформы и кирку
     all_platforms.draw(screen)
