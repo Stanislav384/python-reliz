@@ -1,0 +1,215 @@
+import pygame
+import random
+
+pygame.init()
+
+# --- Константи гри ---
+WIDTH, HEIGHT = 1280, 720
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Zombie Shooter")
+
+background = pygame.transform.scale(pygame.image.load("background.png"), (WIDTH, HEIGHT))
+clock = pygame.time.Clock()
+
+# --- Ігрові параметри ---
+GRAVITY = 1
+JUMP_POWER = -20
+GROUND_Y = 400
+PLAYER_SPEED = 5
+BULLET_SPEED = 15
+ZOMBIE_SPEED = 2
+MAX_ZOMBIES_PER_WAVE = 10
+WAVE_COOLDOWN = 5000  # 5 секунд між хвилями
+
+# --- Клас GameObject (існуючий) ---
+class GameObject():
+    def __init__(self, filename, x=0, y=0, width=10, height=10):
+        self.image_right = pygame.image.load(filename)
+        self.image_right = pygame.transform.scale(self.image_right, (width, height))
+        self.image_left = pygame.transform.flip(self.image_right, True, False)
+        self.image = self.image_right
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.facing_right = True
+        self.velocity_y = 0
+        self.isJumping = False
+
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+    def move(self, dx):
+        self.rect.x += dx
+        if dx > 0:
+            self.image = self.image_right
+            self.facing_right = True
+        elif dx < 0: # Використовуйте elif для коректного оновлення напрямку
+            self.image = self.image_left
+            self.facing_right = False
+
+    def apply_gravity(self):
+        self.velocity_y += GRAVITY
+        self.rect.y += self.velocity_y
+
+        if self.rect.y >= GROUND_Y:
+            self.rect.y = GROUND_Y
+            self.velocity_y = 0
+            self.isJumping = False
+
+    def jump(self):
+        if not self.isJumping:
+            self.velocity_y = JUMP_POWER
+            self.isJumping = True
+
+# --- Новий клас Bullet ---
+class Bullet(GameObject):
+    def __init__(self, x, y, direction):
+        # Ви можете створити окреме зображення для кулі або використовувати просту фігуру
+        super().__init__("bullet.png", x, y, 20, 10) # Припустимо, у вас є "bullet.png"
+        self.direction = direction # 1 для вправо, -1 для вліво
+        self.rect.y += 50 # Зміщення по Y, щоб куля вилітала з рівня рук гравця
+
+    def update(self):
+        self.rect.x += self.direction * BULLET_SPEED
+        # Видаляємо кулю, якщо вона вийшла за межі екрану
+        if self.rect.x < -20 or self.rect.x > WIDTH + 20:
+            return True # Повертаємо True, якщо кулю треба видалити
+        return False # Повертаємо False, якщо куля ще на екрані
+
+# --- Новий клас Zombie ---
+class Zombie(GameObject):
+    def __init__(self, x, y):
+        super().__init__("zombie.png", x, y, 150, 150) # Припустимо, у вас є "zombie.png"
+        self.speed = ZOMBIE_SPEED
+
+    def update(self, player_rect):
+        # Рух зомбі до гравця
+        if self.rect.x < player_rect.x:
+            self.rect.x += self.speed
+            self.image = self.image_right
+            self.facing_right = True
+        elif self.rect.x > player_rect.x:
+            self.rect.x -= self.speed
+            self.image = self.image_left
+            self.facing_right = False
+
+# --- Ініціалізація об'єктів ---
+player = GameObject("player.png", 0, GROUND_Y, 150, 150) # Зменшив розмір гравця для кращої пропорції
+
+bullets = []
+zombies = []
+
+# --- Змінні для хвиль ---
+current_wave = 1
+zombies_to_spawn = 0
+last_wave_time = pygame.time.get_ticks()
+wave_in_progress = False
+
+# --- Функції для хвиль ---
+def start_new_wave():
+    global current_wave, zombies_to_spawn, wave_in_progress, last_wave_time
+    current_wave += 1
+    zombies_to_spawn = current_wave * 2 + random.randint(0, 3) # Збільшуємо кількість зомбі з кожною хвилею
+    if zombies_to_spawn > MAX_ZOMBIES_PER_WAVE:
+        zombies_to_spawn = MAX_ZOMBIES_PER_WAVE
+    wave_in_progress = True
+    last_wave_time = pygame.time.get_ticks()
+    print(f"Почалася хвиля {current_wave}! Зомбі: {zombies_to_spawn}")
+
+def spawn_zombie():
+    # Зомбі можуть з'являтися з лівого або правого краю екрану
+    side = random.choice([-1, 1])
+    if side == -1: # Зліва
+        x = -100
+    else: # Справа
+        x = WIDTH + 100
+    y = GROUND_Y
+    zombies.append(Zombie(x, y))
+
+# --- Головний ігровий цикл ---
+running = True
+while running:
+    # --- Обробка подій ---
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_d:
+                player.move_direction = PLAYER_SPEED
+            elif event.key == pygame.K_a:
+                player.move_direction = -PLAYER_SPEED
+            elif event.key == pygame.K_SPACE:
+                player.jump()
+            elif event.key == pygame.K_f: # Кнопка для стрільби (можна змінити на ліву кнопку миші)
+                bullet_direction = 1 if player.facing_right else -1
+                bullets.append(Bullet(player.rect.centerx, player.rect.centery, bullet_direction))
+
+        elif event.type == pygame.KEYUP:
+            if event.key in (pygame.K_d, pygame.K_a):
+                player.move_direction = 0
+
+    # --- Рух гравця ---
+    player.move(player.move_direction)
+    player.apply_gravity()
+
+    # --- Оновлення куль ---
+    bullets_to_remove = []
+    for bullet in bullets:
+        if bullet.update():
+            bullets_to_remove.append(bullet)
+    for bullet in bullets_to_remove:
+        bullets.remove(bullet)
+
+    # --- Оновлення зомбі ---
+    zombies_to_remove = []
+    for zombie in zombies:
+        zombie.update(player.rect)
+        zombie.apply_gravity() # Зомбі також підкоряються гравітації
+
+        # Перевірка зіткнень кулі із зомбі
+        for bullet in bullets:
+            if zombie.rect.colliderect(bullet.rect):
+                zombies_to_remove.append(zombie)
+                bullets_to_remove.append(bullet) # Видаляємо кулю після влучання
+                break # Куля може влучити лише в одного зомбі за раз
+
+        # Перевірка зіткнень зомбі з гравцем (для прикладу, ви можете додати логіку втрати життя)
+        if zombie.rect.colliderect(player.rect):
+            print("Зомбі торкнувся гравця!")
+            # Тут ви можете реалізувати логіку втрати життя або завершення гри
+
+    # Видаляємо вбиті зомбі та використані кулі
+    for zombie in set(zombies_to_remove): # Використовуємо set, щоб уникнути повторів
+        if zombie in zombies:
+            zombies.remove(zombie)
+    for bullet in set(bullets_to_remove):
+        if bullet in bullets:
+            bullets.remove(bullet)
+
+    # --- Логіка хвиль ---
+    if not wave_in_progress and len(zombies) == 0:
+        current_time = pygame.time.get_ticks()
+        if current_time - last_wave_time > WAVE_COOLDOWN:
+            start_new_wave()
+
+    if wave_in_progress and zombies_to_spawn > 0:
+        if random.randint(0, 100) < 2: # Невеликий шанс спавну зомбі кожного кадру
+            spawn_zombie()
+            zombies_to_spawn -= 1
+            if zombies_to_spawn == 0:
+                wave_in_progress = False # Всі зомбі для поточної хвилі заспавнені
+
+    # --- Малювання всіх об'єктів ---
+    screen.blit(background, (0, 0))
+    player.draw()
+    for bullet in bullets:
+        bullet.draw()
+    for zombie in zombies:
+        zombie.draw()
+
+    # --- Оновлення дисплея ---
+    pygame.display.flip()
+    clock.tick(100)
+
+pygame.quit()
