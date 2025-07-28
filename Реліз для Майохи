@@ -10,7 +10,7 @@ background = pygame.transform.scale(background, (WIDTH, HEIGHT))
 clock = pygame.time.Clock()
 pygame.display.set_caption("MinerLVL")
 
-# Block types and their filenames
+# Типы блоков и их файлы изображений
 BLOCK_TYPES = [
     "Iron_block.png",
     "Stone_Block.png",
@@ -18,7 +18,7 @@ BLOCK_TYPES = [
     "Dirt_Block.png"
 ]
 
-# 1. Добавление класса для платформ (наследует от pygame.sprite.Sprite)
+# 1. Класс для платформ
 class Platform(pygame.sprite.Sprite):
     def __init__(self, x, y, width, height, filename):
         super().__init__()
@@ -31,8 +31,8 @@ class Platform(pygame.sprite.Sprite):
     def draw(self):
         screen.blit(self.image, self.rect)
 
-# 2. Изменение класса GameObject для проверки столкновений
-class GameObject(pygame.sprite.Sprite):  # Inherit from pygame.sprite.Sprite for collision detection
+# 2. Класс для кирки (игрового объекта)
+class GameObject(pygame.sprite.Sprite):
     def __init__(self, filename, x=0, y=0, width=10, height=10):
         super().__init__()
         self.image_right = pygame.image.load(filename)
@@ -43,61 +43,67 @@ class GameObject(pygame.sprite.Sprite):  # Inherit from pygame.sprite.Sprite for
         self.rect.x = x
         self.rect.y = y
         self.facing_right = True
-        self.velocity = 0
-        self.on_ground = True  # Новый флаг для проверки, находится ли персонаж на земле/платформе
-        self.is_falling = True # Flag to control if the pickaxe is falling
+        self.velocity_y = 0 # Вертикальная скорость
+        self.velocity_x = 0 # Горизонтальная скорость
+        self.is_bouncing = False # Флаг, указывающий, отскакивает ли кирка
 
     def draw(self):
         screen.blit(self.image, self.rect)
 
-    def move(self, dx):
-        self.rect.x += dx
-        if dx > 0:
-            self.image = self.image_right
-            self.facing_right = True
-        elif dx < 0:
-            self.image = self.image_left
-            self.facing_right = False
+    def apply_physics(self):
+        # Применяем гравитацию только если не отскакиваем сильно вверх
+        if not self.is_bouncing or self.velocity_y < 0:
+            self.velocity_y += GRAVITY
+        
+        self.rect.x += self.velocity_x
+        self.rect.y += self.velocity_y
 
-    def apply_gravity(self):
-        self.velocity += GRAVITY
-        self.rect.y += self.velocity
-        # Prevent going off-screen bottom (though we'll handle collisions differently now)
+        # Ограничиваем движение по горизонтали в пределах экрана
+        if self.rect.left < 0:
+            self.rect.left = 0
+            self.velocity_x = 0 # Останавливаем горизонтальное движение у края
+        if self.rect.right > WIDTH:
+            self.rect.right = WIDTH
+            self.velocity_x = 0 # Останавливаем горизонтальное движение у края
+
+        # Если кирка ушла слишком далеко вниз, сбрасываем её
         if self.rect.top > HEIGHT:
             self.reset_position()
 
     def reset_position(self):
-        # Reset pickaxe to a random X at the top of the screen
+        # Сброс кирки в случайное X вверху экрана
         self.rect.x = randint(0, WIDTH - self.rect.width)
         self.rect.y = 0
-        self.velocity = 0
-        self.is_falling = True
+        self.velocity_y = 0
+        self.velocity_x = 0
+        self.is_bouncing = False
 
-# 3. Параметры и создание объектов (добавляем платформы)
-start = True
+    def bounce(self):
+        self.velocity_y = JUMP_FORCE # Отскок вверх
+        self.velocity_x = choice([-BOUNCE_SIDE_FORCE, BOUNCE_SIDE_FORCE]) # Случайный отскок в сторону
+        self.is_bouncing = True
 
-GRAVITY = 1
-BLOCK_SIZE = 100 # Assuming blocks are 100x100
-ROWS_OF_BLOCKS = 3 # Number of rows of blocks at the bottom
+# 3. Параметры игры
+GRAVITY = 0.5 # Уменьшаем гравитацию для более плавного падения
+JUMP_FORCE = -10 # Сила отскока вверх
+BOUNCE_SIDE_FORCE = 5 # Сила отскока в сторону
+BLOCK_SIZE = 100 # Размер блоков
+ROWS_OF_BLOCKS = 3 # Начальное количество рядов блоков
 
-player_x = randint(0, WIDTH - 75) # Random initial X for the pickaxe
-player_y = 0
-player = GameObject("Wooden_Pickaxe.png", player_x, player_y, 75, 75)
+player = GameObject("Wooden_Pickaxe.png", randint(0, WIDTH - 75), 0, 75, 75)
 
-# Create a sprite group for platforms for easier collision detection and removal
+# Создаем группу спрайтов для платформ для удобства
 all_platforms = pygame.sprite.Group()
 
 def generate_new_row_of_blocks():
-    """Generates a new row of random blocks at the bottom."""
+    """Генерирует новый ряд случайных блоков внизу."""
     for i in range(WIDTH // BLOCK_SIZE):
         block_filename = choice(BLOCK_TYPES)
-        # Place blocks at the very bottom, just above the visible screen
-        # We will shift existing blocks up to make room
         new_block = Platform(i * BLOCK_SIZE, HEIGHT, BLOCK_SIZE, BLOCK_SIZE, block_filename)
         all_platforms.add(new_block)
 
 def initial_block_generation():
-    """Generates the initial rows of blocks."""
+    """Генерирует начальные ряды блоков."""
     for row in range(ROWS_OF_BLOCKS):
         for col in range(WIDTH // BLOCK_SIZE):
             block_filename = choice(BLOCK_TYPES)
@@ -105,7 +111,8 @@ def initial_block_generation():
 
 initial_block_generation()
 
-# Game loop
+# Игровой цикл
+start = True
 while start:
     screen.blit(background, (0,0))
     
@@ -113,27 +120,26 @@ while start:
         if event.type == pygame.QUIT:
             start = False
         
-    # Apply gravity to the player (pickaxe)
-    if player.is_falling:
-        player.apply_gravity()
+    # Применяем физику к кирке
+    player.apply_physics()
 
-    # Check for collisions between player and platforms
-    collided_blocks = pygame.sprite.spritecollide(player, all_platforms, False)
+    # Проверяем столкновения между киркой и платформами
+    # 'True' в spritecollide означает, что столкнувшиеся блоки будут удалены из группы
+    collided_blocks = pygame.sprite.spritecollide(player, all_platforms, True) 
+    
     for block in collided_blocks:
-        # If the pickaxe is falling and hits a block from above
-        if player.velocity > 0 and player.rect.bottom <= block.rect.bottom:
-            all_platforms.remove(block) # Remove the hit block
-            player.reset_position() # Reset pickaxe position to top for a new fall
-            player.is_falling = True # Ensure it starts falling again
+        # Если кирка столкнулась с блоком
+        # Мы предполагаем, что если произошло столкновение, и блок удален,
+        # то кирка "разрушила" его.
+        player.bounce() # Отскакиваем!
 
-            # Move all existing blocks up to fill the gap and add a new row at the bottom
-            for platform in all_platforms:
-                platform.rect.y -= BLOCK_SIZE # Move blocks up by one block size
-            generate_new_row_of_blocks() # Add a new random row at the bottom
+        # Двигаем все остальные блоки вверх, чтобы освободить место
+        for platform in all_platforms:
+            platform.rect.y -= BLOCK_SIZE
+        generate_new_row_of_blocks() # Добавляем новый случайный ряд внизу
 
-
-    # Draw all platforms
-    all_platforms.draw(screen) # Use all_platforms.draw() for convenience
+    # Отрисовываем все платформы и кирку
+    all_platforms.draw(screen)
     player.draw()
     
     pygame.display.flip()
