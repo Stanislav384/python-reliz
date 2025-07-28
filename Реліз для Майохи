@@ -3,56 +3,74 @@ from random import randint, choice
 
 pygame.init()
 
+# --- Параметры игры ---
 WIDTH, HEIGHT = 600, 800
+FPS = 60
+GRAVITY = 1.0 # Сила гравитации
+
+BLOCK_SIZE = 100 # Размер одного блока (квадрата)
+# Количество рядов блоков, которые будут видны на экране
+# Это будет поддерживаться постоянно
+VISIBLE_ROWS = HEIGHT // BLOCK_SIZE 
+if HEIGHT % BLOCK_SIZE != 0: # Если высота не делится нацело, добавляем 1 ряд, чтобы занять все пространство
+    VISIBLE_ROWS += 1
+
+# --- Загрузка ресурсов ---
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-background = pygame.image.load("BackgroundMINER.png")
-background = pygame.transform.scale(background, (WIDTH, HEIGHT))
-clock = pygame.time.Clock()
 pygame.display.set_caption("MinerLVL")
 
+try:
+    background = pygame.image.load("BackgroundMINER.png").convert_alpha()
+    background = pygame.transform.scale(background, (WIDTH, HEIGHT))
+except pygame.error as e:
+    print(f"Ошибка загрузки фона: {e}. Убедитесь, что файл 'BackgroundMINER.png' существует.")
+    background = pygame.Surface((WIDTH, HEIGHT)) # Создаем пустую поверхность на случай ошибки
+    background.fill((0, 0, 0)) # Заливаем черным
+
 # Типы блоков и их файлы изображений
-BLOCK_TYPES = [
-    "Iron_block.png",
-    "Stone_Block.png",
-    "Diamond_Block.png",
-    "Dirt_Block.png"
-]
+BLOCK_IMAGES = {
+    "iron": pygame.transform.scale(pygame.image.load("Iron_block.png").convert_alpha(), (BLOCK_SIZE, BLOCK_SIZE)),
+    "stone": pygame.transform.scale(pygame.image.load("Stone_Block.png").convert_alpha(), (BLOCK_SIZE, BLOCK_SIZE)),
+    "diamond": pygame.transform.scale(pygame.image.load("Diamond_Block.png").convert_alpha(), (BLOCK_SIZE, BLOCK_SIZE)),
+    "dirt": pygame.transform.scale(pygame.image.load("Dirt_Block.png").convert_alpha(), (BLOCK_SIZE, BLOCK_SIZE))
+}
+BLOCK_TYPES_LIST = list(BLOCK_IMAGES.keys()) # Список для случайного выбора типа блока
 
-# Класс для платформ (блоков)
-class Platform(pygame.sprite.Sprite):
-    def __init__(self, x, y, width, height, filename):
+try:
+    PICKAXE_IMAGE = pygame.transform.scale(pygame.image.load("Wooden_Pickaxe.png").convert_alpha(), (75, 75))
+except pygame.error as e:
+    print(f"Ошибка загрузки кирки: {e}. Убедитесь, что файл 'Wooden_Pickaxe.png' существует.")
+    PICKAXE_IMAGE = pygame.Surface((75, 75)) # Заглушка
+    PICKAXE_IMAGE.fill((255, 0, 0)) # Красный квадрат
+
+# --- Класс для Блоков (Платформ) ---
+class Block(pygame.sprite.Sprite):
+    def __init__(self, x, y, block_type):
         super().__init__()
-        self.image = pygame.image.load(filename)
-        self.image = pygame.transform.scale(self.image, (width, height))
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-    
-    def draw(self):
-        screen.blit(self.image, self.rect)
+        self.type = block_type
+        self.image = BLOCK_IMAGES[self.type]
+        self.rect = self.image.get_rect(topleft=(x, y))
 
-# Класс для кирки (игрового объекта)
-class GameObject(pygame.sprite.Sprite):
-    def __init__(self, filename, x=0, y=0, width=10, height=10):
+    def update(self):
+        # Метод update можно использовать для дополнительной логики блока, если понадобится
+        pass
+
+# --- Класс для Кирки (Игрового Объекта) ---
+class Pickaxe(pygame.sprite.Sprite):
+    def __init__(self, image):
         super().__init__()
-        self.image_right = pygame.image.load(filename)
-        self.image_right = pygame.transform.scale(self.image_right, (width, height))
-        self.image_left = pygame.transform.flip(self.image_right, True, False)
-        self.image = self.image_right
+        self.image = image
         self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-        self.facing_right = True
-        self.velocity_y = 0 # Вертикальная скорость
+        self.reset_position() # Устанавливаем начальную позицию
 
-    def draw(self):
-        screen.blit(self.image, self.rect)
+    def update(self):
+        self.apply_gravity()
 
     def apply_gravity(self):
         self.velocity_y += GRAVITY
         self.rect.y += self.velocity_y
         
-        # Если кирка ушла слишком далеко вниз (на случай, если нет блоков), сбрасываем её
+        # Если кирка ушла слишком далеко вниз (на случай, если нет блоков или баг), сбрасываем её
         if self.rect.top > HEIGHT:
             self.reset_position()
 
@@ -62,71 +80,72 @@ class GameObject(pygame.sprite.Sprite):
         self.rect.y = 0
         self.velocity_y = 0
 
-# Параметры игры
-GRAVITY = 1.0 # Сила гравитации
-BLOCK_SIZE = 100 # Размер блоков (предполагаем 100x100)
-VISIBLE_ROWS_OF_BLOCKS = 4 # Количество видимых рядов блоков на экране
+# --- Функции генерации и управления блоками ---
+all_blocks = pygame.sprite.Group() # Группа для всех блоков
 
-player = GameObject("Wooden_Pickaxe.png", randint(0, WIDTH - 75), 0, 75, 75)
-
-# Создаем группу спрайтов для платформ для удобства
-all_platforms = pygame.sprite.Group()
-
-def generate_row_at_y(y_position):
+def generate_row_of_blocks(y_position):
     """Генерирует новый ряд случайных блоков на заданной Y-позиции."""
     for i in range(WIDTH // BLOCK_SIZE):
-        block_filename = choice(BLOCK_TYPES)
-        new_block = Platform(i * BLOCK_SIZE, y_position, BLOCK_SIZE, BLOCK_SIZE, block_filename)
-        all_platforms.add(new_block)
+        block_type = choice(BLOCK_TYPES_LIST)
+        new_block = Block(i * BLOCK_SIZE, y_position, block_type)
+        all_blocks.add(new_block)
 
-def initial_block_generation():
-    """Генерирует начальные ряды блоков, заполняя нижнюю часть экрана."""
-    for row in range(VISIBLE_ROWS_OF_BLOCKS):
-        # Размещаем блоки снизу вверх
-        y_pos = HEIGHT - (VISIBLE_ROWS_OF_BLOCKS - row) * BLOCK_SIZE
-        generate_row_at_y(y_pos)
+def initialize_game_area():
+    """Заполняет нижнюю часть экрана начальными рядами блоков."""
+    # Создаем блоки, заполняя экран снизу вверх
+    for row in range(VISIBLE_ROWS):
+        y_pos = HEIGHT - (VISIBLE_ROWS - row) * BLOCK_SIZE
+        generate_row_of_blocks(y_pos)
 
-initial_block_generation()
+def shift_all_blocks_up():
+    """Сдвигает все существующие блоки вверх на высоту одного блока."""
+    for block in all_blocks:
+        block.rect.y -= BLOCK_SIZE
 
-# Игровой цикл
-start = True
-while start:
-    screen.blit(background, (0,0))
-    
+def remove_offscreen_blocks():
+    """Удаляет блоки, которые полностью ушли за верхнюю границу экрана."""
+    for block in all_blocks.copy(): # Используем .copy() для безопасного удаления
+        if block.rect.bottom < 0:
+            all_blocks.remove(block)
+
+# --- Инициализация игры ---
+player = Pickaxe(PICKAXE_IMAGE)
+initialize_game_area() # Генерируем начальные блоки
+
+clock = pygame.time.Clock()
+running = True
+
+# --- Игровой цикл ---
+while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            start = False
+            running = False
         
-    # Применяем гравитацию к кирке
-    player.apply_gravity()
+    # --- Обновление объектов ---
+    player.update() # Обновляем позицию кирки (применяем гравитацию)
 
-    # Проверяем столкновения между киркой и платформами
-    # 'True' в spritecollide означает, что столкнувшиеся блоки будут удалены из группы
-    collided_blocks = pygame.sprite.spritecollide(player, all_platforms, True) 
+    # Проверяем столкновения между киркой и блоками
+    # 'True' означает, что столкнувшиеся блоки будут удалены из группы 'all_blocks'
+    collided_blocks = pygame.sprite.spritecollide(player, all_blocks, True) 
     
     # Если кирка столкнулась хотя бы с одним блоком
     if collided_blocks:
         player.reset_position() # Кирка возвращается наверх
 
-        # Сдвигаем все оставшиеся блоки вверх
-        for platform in all_platforms:
-            platform.rect.y -= BLOCK_SIZE # Двигаем вверх на высоту одного блока
+        shift_all_blocks_up() # Сдвигаем все оставшиеся блоки вверх
+        remove_offscreen_blocks() # Удаляем блоки, ушедшие за верх экрана
         
-        # Удаляем блоки, которые ушли за верхнюю границу экрана
-        for platform in all_platforms.copy(): # Используем .copy() для безопасного удаления из группы во время итерации
-            if platform.rect.bottom < 0: # Если низ блока ушёл выше верхней границы экрана
-                all_platforms.remove(platform)
-        
-        # Генерируем новый ряд блоков в самом низу (который при следующем сдвиге станет видимым)
-        # Он должен быть на Y-позиции, которая будет чуть ниже текущего самого нижнего видимого блока,
-        # чтобы он "подъехал" на место
-        generate_row_at_y(HEIGHT - BLOCK_SIZE) # Новый ряд появляется прямо над нижней границей экрана
+        # Генерируем НОВЫЙ ряд блоков в самом низу (который при следующем сдвиге поднимется)
+        # Этот ряд должен появиться в нижней части экрана, чтобы заполнить "пустоту"
+        generate_row_of_blocks(HEIGHT - BLOCK_SIZE) 
 
-    # Отрисовываем все платформы и кирку
-    all_platforms.draw(screen)
-    player.draw()
+    # --- Отрисовка ---
+    screen.blit(background, (0,0)) # Рисуем фон
+
+    all_blocks.draw(screen) # Отрисовываем все блоки
+    player.draw() # Отрисовываем кирку
     
-    pygame.display.flip()
-    clock.tick(60)
+    pygame.display.flip() # Обновляем весь экран
+    clock.tick(FPS) # Контроль FPS
 
 pygame.quit()
