@@ -1,0 +1,240 @@
+import pygame
+from random import randint
+import math
+
+pygame.init()
+
+WIDTH, HEIGHT = 1200, 800
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+background = pygame.image.load("bg.jpg")
+background = pygame.transform.scale(background, (WIDTH, HEIGHT))
+clock = pygame.time.Clock()
+pygame.display.set_caption("Clicker beta")
+
+# --- Constants ---
+GRAVITY = 1
+GROUND_Y = 437
+JUMP_FORCE = -15
+DAGGER_SPEED = 15
+ENEMY_SPEED = 2
+
+# --- Classes ---
+class Platform(pygame.sprite.Sprite):
+    def __init__(self, x, y, width, height, filename):
+        super().__init__()
+        self.image = pygame.image.load(filename)
+        self.image = pygame.transform.scale(self.image, (width, height))
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+    
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+class GameObject():
+    def __init__(self, filename, x=0, y=0, width=10, height=10):
+        self.image_right = pygame.image.load(filename)
+        self.image_right = pygame.transform.scale(self.image_right, (width, height))
+        self.image_left = pygame.transform.flip(self.image_right, True, False)
+        self.image = self.image_right
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.facing_right = True
+        self.velocity = 0
+        self.isJumping = False
+        self.on_ground = True
+    
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+    def move(self, dx, platforms):
+        self.rect.x += dx
+        
+        # Check for horizontal collisions with platforms
+        for platform in platforms:
+            if self.rect.colliderect(platform.rect):
+                if dx > 0: # Moving right, hit left side of platform
+                    self.rect.right = platform.rect.left
+                elif dx < 0: # Moving left, hit right side of platform
+                    self.rect.left = platform.rect.right
+
+        if dx > 0:
+            self.image = self.image_right
+            self.facing_right = True
+        elif dx < 0:
+            self.image = self.image_left
+            self.facing_right = False
+
+    def apply_gravity(self, platforms):
+        self.velocity += GRAVITY
+        self.rect.y += self.velocity
+        
+        self.on_ground = False # Assume not on ground until proven otherwise
+
+        # Check for collisions with each platform
+        for platform in platforms:
+            if self.rect.colliderect(platform.rect):
+                # If falling and hit top of platform
+                if self.velocity >= 0:
+                    self.rect.bottom = platform.rect.top
+                    self.velocity = 0
+                    self.isJumping = False
+                    self.on_ground = True
+                # If jumping up and hit bottom of platform
+                elif self.velocity < 0:
+                    self.rect.top = platform.rect.bottom
+                    self.velocity = 0 # Stop upward movement
+                return # Exit, as we've landed on a platform
+
+        # Check for collision with the main ground
+        if self.rect.y >= GROUND_Y:
+            self.rect.y = GROUND_Y 
+            self.velocity = 0
+            self.isJumping = False
+            self.on_ground = True
+
+    def jump(self):
+        if self.on_ground:
+            self.velocity = JUMP_FORCE
+            self.isJumping = True
+            self.on_ground = False
+
+class Projectile(pygame.sprite.Sprite):
+    def __init__(self, start_x, start_y, target_x, target_y, speed, filename):
+        super().__init__()
+        self.image_original = pygame.image.load(filename).convert_alpha()
+        self.image_original = pygame.transform.scale(self.image_original, (30, 10)) # Adjust size as needed
+        self.image = self.image_original
+        self.rect = self.image.get_rect(center=(start_x, start_y))
+
+        # Calculate direction
+        angle = math.atan2(target_y - start_y, target_x - start_x)
+        self.dx = math.cos(angle) * speed
+        self.dy = math.sin(angle) * speed
+        
+        # Rotate image to face direction of movement
+        self.image = pygame.transform.rotate(self.image_original, -math.degrees(angle))
+        self.rect = self.image.get_rect(center=self.rect.center)
+
+
+    def update(self):
+        self.rect.x += self.dx
+        self.rect.y += self.dy
+        # Remove if off-screen
+        if not screen.get_rect().colliderect(self.rect):
+            self.kill() # Remove sprite from all groups
+
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+class Enemy(GameObject):
+    def __init__(self, x, y, width, height, filename, move_range):
+        super().__init__(filename, x, y, width, height)
+        self.original_x = x
+        self.move_range = move_range # How far left/right the enemy moves
+        self.direction = 1 # 1 for right, -1 for left
+
+    def update(self, platforms):
+        # Move horizontally
+        self.move(self.direction * ENEMY_SPEED, platforms)
+
+        # Reverse direction if hitting boundaries or edge of platform
+        if self.direction == 1 and self.rect.x >= self.original_x + self.move_range:
+            self.direction = -1
+        elif self.direction == -1 and self.rect.x <= self.original_x - self.move_range:
+            self.direction = 1
+        
+        # Apply gravity to enemy
+        self.apply_gravity(platforms)
+
+# --- Game Setup ---
+start = True
+
+player_x = 0
+player_y = 435
+player_idle = 0
+player1 = GameObject("player.png", player_x, player_y, 100, 100)
+
+platforms = []
+platforms.append(Platform(400, 450, 200, 50, "platform.png"))
+platforms.append(Platform(800, 250, 500, 50, "platform.png"))
+platforms.append(Platform(150, 350, 150, 50, "platform.png"))
+platforms.append(Platform(900, -400, 50, 500, "platform.png")) # This looks like a vertical wall
+platforms.append(Platform(900, 285, 50, 300, "platform.png")) # Another vertical wall
+platforms.append(Platform(450, 325, 50, 50, "platform.png"))
+platforms.append(Platform(650, 250, 150, 50, "platform.png"))
+platforms.append(Platform(500, 400, 50, 50, "platform.png"))
+
+# --- Enemies and Projectiles Lists ---
+enemies = []
+# Add some enemies
+enemies.append(Enemy(500, 300, 70, 70, "enemy.png", 150)) # Enemy on the first platform
+enemies.append(Enemy(950, 150, 70, 70, "enemy.png", 200)) # Enemy on the second platform
+enemies.append(Enemy(200, 250, 70, 70, "enemy.png", 50)) # Enemy on the third platform
+
+projectiles = [] # List to store active daggers
+
+# --- Game Loop ---
+while start:
+    screen.blit(background, (0,0))
+    
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            start = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_d:
+                player_idle = 5
+            if event.key == pygame.K_a:
+                player_idle = -5
+            if event.key == pygame.K_SPACE:
+                player1.jump()
+        
+        if event.type == pygame.KEYUP:
+            if event.key in (pygame.K_d, pygame.K_a):
+                player_idle = 0
+        
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1: # Left mouse button
+                mouse_x, mouse_y = pygame.mouse.get_pos()
+                new_dagger = Projectile(
+                    player1.rect.centerx, 
+                    player1.rect.centery, 
+                    mouse_x, 
+                    mouse_y, 
+                    DAGGER_SPEED, 
+                    "dagger.png"
+                )
+                projectiles.append(new_dagger)
+
+    # --- Update Game Objects ---
+    player1.move(player_idle, platforms)
+    player1.apply_gravity(platforms)
+
+    # Update and draw enemies
+    for enemy in enemies:
+        enemy.update(platforms)
+        enemy.draw()
+
+    # Update and draw projectiles
+    for dagger in projectiles[:]: # Iterate over a slice to allow modification during loop
+        dagger.update()
+        dagger.draw()
+        
+        # Check for collisions between daggers and enemies
+        for enemy in enemies[:]: # Iterate over a slice
+            if dagger.rect.colliderect(enemy.rect):
+                projectiles.remove(dagger)
+                enemies.remove(enemy) # Remove enemy when hit
+                break # Dagger can only hit one enemy
+
+    # --- Draw Game Objects ---
+    for platform in platforms:
+        platform.draw()
+    
+    player1.draw()
+    
+    pygame.display.flip()
+    clock.tick(60)
+
+pygame.quit()
