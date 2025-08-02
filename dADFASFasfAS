@@ -1,41 +1,38 @@
-local button = script.Parent -- Кнопка
- local player = game.Players.LocalPlayer
- local character = player.Character or player.CharacterAdded:Wait()
- local humanoid = character:WaitForChild("Humanoid")
- 
- local defaultSpeed = humanoid.WalkSpeed -- Стандартная скорость
- local boostMultiplier = 6
- local boostSpeed = defaultSpeed * boostMultiplier -- Увеличенная скорость (в 6 раз)
- local boostDuration = 3 -- Длительность ускорения в секундах
- local isBoosted = false -- Флаг состояния ускорения
- 
- -- Создаем огненный след
- local fireTrail = Instance.new("ParticleEmitter")
- fireTrail.Parent = character:WaitForChild("HumanoidRootPart") -- Прикрепляем к центральной части персонажа
- fireTrail.Texture = "rbxassetid://934795581" -- ID текстуры огня (можно заменить)
- fireTrail.Rate = 50 -- Количество частиц в секунду
- fireTrail.Lifetime = NumberRange.new(0.5, 1) -- Время жизни каждой частицы
- fireTrail.Speed = NumberRange.new(1, 3) -- Скорость движения частиц
- fireTrail.Size = NumberSequence.new({0, 1}, {1, 0}) -- Размер частиц (уменьшаются со временем)
- fireTrail.Transparency = NumberSequence.new({0, 0}, {1, 1}) -- Прозрачность частиц (становятся прозрачными со временем)
- fireTrail.EmissionDirection = Vector3.new(0, -1, 0) -- Направление эмиссии (вниз)
- fireTrail.SpreadAngle = Vector2.new(30, 30) -- Угол рассеивания
- fireTrail.Enabled = false -- Изначально выключен
- 
- local function boostSpeedFunction()
-  if isBoosted then return end -- Если уже ускорен, ничего не делаем
-  isBoosted = true
- 
-  humanoid.WalkSpeed = boostSpeed -- Включаем ускорение
-  button.Visible = false -- Прячем кнопку
-  fireTrail.Enabled = true -- Включаем огненный след
- 
-  task.wait(boostDuration) -- Ждём 3 секунды
- 
-  humanoid.WalkSpeed = defaultSpeed -- Возвращаем стандартную скорость
-  isBoosted = false -- Сбрасываем флаг
-  button.Visible = true -- Делаем кнопку снова видимой
-  fireTrail.Enabled = false -- Выключаем огненный след
- end
- 
- button.MouseButton1Click:Connect(boostSpeedFunction)
+local button = script.Parent -- Ссылка на кнопку, в которой находится этот скрипт
+local player = game.Players.LocalPlayer -- Получаем локального игрока
+local character = player.Character or player.CharacterAdded:Wait() -- Ждем, пока загрузится персонаж игрока
+local humanoid = character:WaitForChild("Humanoid") -- Ждем Humanoid в персонаже
+
+local defaultSpeed = humanoid.WalkSpeed -- Сохраняем стандартную скорость ходьбы
+local boostSpeed = defaultSpeed * 6 -- Новая скорость: в 6 раз больше стандартной
+local boostDuration = 3 -- Длительность ускорения в секундах
+local isBoosted = false -- Флаг, чтобы избежать повторного срабатывания, пока активен буст
+
+local fireEffect = Instance.new("Fire") -- Создаем стандартный эффект огня Roblox
+fireEffect.Size = 3 -- Размер огня (можете настроить по вкусу)
+fireEffect.Heat = 50 -- Интенсивность тепла огня
+fireEffect.Color = Color3.fromRGB(255, 100, 0) -- Цвет огня (оранжевый)
+
+-- Прикрепляем эффект огня к HumanoidRootPart персонажа,
+-- чтобы огонь тянулся за центром персонажа
+fireEffect.Parent = character:WaitForChild("HumanoidRootPart")
+fireEffect.Enabled = false -- Изначально огонь выключен
+
+local function boostSpeedFunction()
+    if isBoosted then return end -- Если ускорение уже активно, выходим
+    isBoosted = true -- Устанавливаем флаг, что ускорение активно
+
+    humanoid.WalkSpeed = boostSpeed -- Увеличиваем скорость ходьбы
+    fireEffect.Enabled = true -- Включаем эффект огня
+    button.Visible = false -- Прячем кнопку на время действия буста
+
+    task.wait(boostDuration) -- Ждем указанное время
+
+    humanoid.WalkSpeed = defaultSpeed -- Возвращаем стандартную скорость
+    fireEffect.Enabled = false -- Выключаем эффект огня
+    isBoosted = false -- Сбрасываем флаг
+    button.Visible = true -- Показываем кнопку снова
+end
+
+-- Подключаем функцию к событию нажатия кнопки
+button.MouseButton1Click:Connect(boostSpeedFunction)
