@@ -4,12 +4,12 @@ local character = player.Character or player.CharacterAdded:Wait() -- Ждем, 
 local humanoid = character:WaitForChild("Humanoid") -- Ждем Humanoid в персонаже
 
 local defaultSpeed = humanoid.WalkSpeed -- Сохраняем стандартную скорость ходьбы
-local boostSpeed = defaultSpeed * 6 -- Новая скорость: в 6 раз больше стандартной
-local boostDuration = 3 -- Длительность ускорения в секундах
+local boostSpeed = defaultSpeed * 3 -- Новая скорость: в 6 раз больше стандартной
+local boostDuration = 6 -- Длительность ускорения в секундах
 local isBoosted = false -- Флаг, чтобы избежать повторного срабатывания, пока активен буст
 
 local fireEffect = Instance.new("Fire") -- Создаем стандартный эффект огня Roblox
-fireEffect.Size = 3 -- Размер огня (можете настроить по вкусу)
+fireEffect.Size = 50 -- Размер огня (можете настроить по вкусу)
 fireEffect.Heat = 50 -- Интенсивность тепла огня
 fireEffect.Color = Color3.fromRGB(255, 100, 0) -- Цвет огня (оранжевый)
 
