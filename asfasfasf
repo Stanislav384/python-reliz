@@ -1,0 +1,77 @@
+/**
+ * Создает Google Форму с тестом по математике.
+ */
+function createMathQuiz() {
+  // --- НАСТРОЙКИ ---
+  const formTitle = 'Тест по математике (30 вопросов)';
+  const formDescription = 'Выберите один правильный ответ для каждого вопроса. За каждый правильный ответ начисляется 1 балл.';
+  
+  // --- БАЗА ВОПРОСОВ И ОТВЕТОВ ---
+  // Структура: { question: "Текст вопроса", options: ["Ответ 1", "Ответ 2", "Ответ 3", "Ответ 4"], correctAnswer: "Текст правильного ответа" }
+  const quizData = [
+    { question: "Чему равно 15 + 27?", options: ["32", "42", "45", "52"], correctAnswer: "42" },
+    { question: "Результат умножения 8 на 9?", options: ["64", "72", "81", "89"], correctAnswer: "72" },
+    { question: "Решите: 60 / 5 = ?", options: ["10", "12", "14", "15"], correctAnswer: "12" },
+    { question: "Сколько будет 100 - 34?", options: ["66", "76", "56", "64"], correctAnswer: "66" },
+    { question: "Найдите X, если X + 15 = 40", options: ["15", "20", "25", "30"], correctAnswer: "25" },
+    { question: "Какое число является простым?", options: ["9", "15", "21", "17"], correctAnswer: "17" },
+    { question: "Чему равен квадратный корень из 81?", options: ["7", "8", "9", "10"], correctAnswer: "9" },
+    { question: "Найдите 20% от 200.", options: ["20", "40", "50", "100"], correctAnswer: "40" },
+    { question: "Периметр квадрата со стороной 5 см равен...", options: ["15 см", "20 см", "25 см", "30 см"], correctAnswer: "20 см" },
+    { question: "Результат выражения 5 * (4 + 6)?", options: ["30", "40", "50", "60"], correctAnswer: "50" },
+    { question: "Сколько граней у куба?", options: ["4", "6", "8", "12"], correctAnswer: "6" },
+    { question: "Переведите 0.5 в проценты.", options: ["5%", "50%", "0.5%", "500%"], correctAnswer: "50%" },
+    { question: "Какова площадь прямоугольника со сторонами 7 и 8 см?", options: ["49 см²", "56 см²", "64 см²", "15 см²"], correctAnswer: "56 см²" },
+    { question: "Округлите 3.14159 до сотых.", options: ["3.1", "3.14", "3.142", "3.15"], correctAnswer: "3.14" },
+    { question: "Решите уравнение: 3x = 27", options: ["7", "8", "9", "10"], correctAnswer: "9" },
+    { question: "Какая дробь больше: 1/2 или 1/3?", options: ["1/2", "1/3", "Они равны", "Нельзя сравнить"], correctAnswer: "1/2" },
+    { question: "Чему равен 2 в пятой степени (2^5)?", options: ["10", "16", "32", "64"], correctAnswer: "32" },
+    { question: "Сумма углов в треугольнике равна...", options: ["90°", "180°", "270°", "360°"], correctAnswer: "180°" },
+    { question: "Если поезд едет со скоростью 60 км/ч, какое расстояние он проедет за 3 часа?", options: ["120 км", "150 км", "180 км", "240 км"], correctAnswer: "180 км" },
+    { question: "Найдите среднее арифметическое чисел 10, 20, 30.", options: ["15", "20", "25", "60"], correctAnswer: "20" },
+    { question: "Какой будет следующий член последовательности: 2, 5, 8, 11, ...?", options: ["12", "13", "14", "15"], correctAnswer: "14" },
+    { question: "Чему равно 15 * 0?", options: ["15", "1", "0", "Не определено"], correctAnswer: "0" },
+    { question: "Сколько минут в 2.5 часах?", options: ["120", "135", "150", "160"], correctAnswer: "150" },
+    { question: "Римская цифра IX означает...", options: ["9", "11", "4", "6"], correctAnswer: "9" },
+    { question: "Чему равно 7 * 7 - 9?", options: ["40", "49", "30", "2"], correctAnswer: "40" },
+    { question: "Найдите x, если 50 / x = 5", options: ["5", "10", "25", "50"], correctAnswer: "10" },
+    { question: "Площадь круга вычисляется по формуле...", options: ["2πR", "πR²", "πD", "R²"], correctAnswer: "πR²" },
+    { question: "Чему равен факториал числа 4 (4!)?", options: ["12", "16", "24", "28"], correctAnswer: "24" },
+    { question: "Какова вероятность выпадения орла при подбрасывании монеты?", options: ["25%", "50%", "75%", "100%"], correctAnswer: "50%" },
+    { question: "Сколько ребер у тетраэдра?", options: ["4", "6", "8", "10"], correctAnswer: "6" }
+  ];
+
+  // Создаем форму
+  const form = FormApp.create(formTitle)
+    .setDescription(formDescription);
+
+  // Делаем форму тестом
+  form.setIsQuiz(true);
+
+  // Добавляем вопросы в цикле
+  quizData.forEach(q => {
+    // Создаем вопрос с множественным выбором
+    const item = form.addMultipleChoiceItem();
+    item.setTitle(q.question);
+    
+    // Создаем варианты ответов
+    const choices = q.options.map(optionText => {
+      // Правильный ответ отмечаем как верный
+      const isCorrect = (optionText === q.correctAnswer);
+      return item.createChoice(optionText, isCorrect);
+    });
+    
+    // Устанавливаем варианты ответов для вопроса
+    item.setChoices(choices);
+    
+    // Назначаем 1 балл за правильный ответ
+    item.setPoints(1);
+    
+    // Делаем вопрос обязательным
+    item.setRequired(true);
+  });
+  
+  // Выводим ссылку на созданную форму в лог
+  Logger.log(`Форма создана! Ссылка для редактирования: ${form.getEditUrl()}`);
+  Logger.log(`Ссылка для заполнения: ${form.getPublishedUrl()}`);
+}
