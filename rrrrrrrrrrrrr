@@ -1,21 +1,127 @@
--- GuiManager (Часть 1: Таймер лобби)
+-- GameManager (Часть 2: Старт раунда и спавн ассетов)
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- НАСТРОЙКИ <<-- ДОБАВЛЕНЫ НОВЫЕ
+local COUNTDOWN_SECONDS = 10
+local ROUND_DURATION = 300 -- 5 минут
+
+-- ССЫЛКИ НА ОБЪЕКТЫ <<-- ДОБАВЛЕНЫ НОВЫЕ
+local startGamePlatform = Workspace:WaitForChild("StartGame")
+local buildZones = Workspace:WaitForChild("BuildZones"):GetChildren()
 local UpdateCountdownUI = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("UpdateCountdownUI")
+local UpdateGameUIEvent = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("UpdateGameUIEvent") -- <<-- НОВОЕ
+local BrickSets = ReplicatedStorage:WaitForChild("BrickSets") -- <<-- НОВОЕ
+local CurrentBrickSet = BrickSets:WaitForChild("LegoHouseSet") -- <<-- НОВОЕ
+local CurrentTemplateSet = BrickSets:WaitForChild("LegoHouseSet_Template") -- <<-- НОВОЕ
 
-local UI = script.Parent
-local CountdownLabel = UI:WaitForChild("CountdownLabel")
+-- ПЕРЕМЕННЫЕ СОСТОЯНИЯ <<-- ДОБАВЛЕНЫ НОВЫЕ
+local playersInLobby = {}
+local countdownInProgress = false
+local gameInProgress = false
+local playerProgress = {} -- <<-- НОВОЕ (для отслеживания прогресса игроков)
 
--- Обработчик для таймера лобби
-local function onUpdateCountdown(value)
-    if type(value) == "number" and value > 0 then
-        CountdownLabel.Visible = true
-        CountdownLabel.Text = "До старта: " .. value
-    else
-        CountdownLabel.Visible = false
+-- Функция телепортации и ПОДГОТОВКИ к игре <<-- ОБНОВЛЕНА
+local function setupGame(playersToPlay)
+    print("Начинаем игру для " .. #playersToPlay .. " игроков!")
+    gameInProgress = true -- <<-- НОВОЕ: помечаем, что игра началась
+    playerProgress = {}   -- <<-- НОВОЕ: очищаем таблицу прогресса
+    
+    local availableBuildZones = {}
+    for i=1, #buildZones do table.insert(availableBuildZones, buildZones[i]) end
+
+    for _, player in ipairs(playersToPlay) do
+        -- 1. Телепортируем игрока
+        if player.Character then
+            local randomIndex = math.random(1, #availableBuildZones)
+            local buildZone = table.remove(availableBuildZones, randomIndex)
+            if buildZone then
+                player.Character:SetPrimaryPartCFrame(buildZone.CFrame + Vector3.new(0, 5, 0))
+                
+                -- 2. Создаем шаблон для строительства <<-- НОВЫЙ БЛОК
+                local template = CurrentTemplateSet:Clone()
+                template.Name = "Template_" .. player.Name
+                template:SetPrimaryPartCFrame(buildZone.CFrame + Vector3.new(0, 10, 0))
+                template:SetAttribute("IsGameAsset", true) -- Помечаем для легкой очистки
+                template.Parent = Workspace
+                
+                -- 3. Создаем набор деталей для выбора <<-- НОВЫЙ БЛОК
+                local partSet = CurrentBrickSet:Clone()
+                partSet.Name = "PartSet_" .. player.Name
+                partSet:SetPrimaryPartCFrame(buildZone.CFrame + Vector3.new(15, 2, 0)) -- Ставим сбоку от зоны
+                partSet:SetAttribute("IsGameAsset", true)
+                partSet.Parent = Workspace
+
+                -- 4. Инициализируем прогресс игрока <<-- НОВЫЙ БЛОК
+                playerProgress[player.UserId] = {
+                    placedBricks = {},
+                    finished = false,
+                    timeTaken = 0,
+                    roundTimer = ROUND_DURATION
+                }
+            end
+        end
     end
+
+    -- 5. Запускаем таймер раунда <<-- НОВЫЙ БЛОК
+    for i = ROUND_DURATION, 0, -1 do
+        local minutes = math.floor(i / 60)
+        local seconds = i % 60
+        local timerText = string.format("%02d:%02d", minutes, seconds)
+        UpdateGameUIEvent:FireAllClients("UpdateTimer", "Раунд: " .. timerText)
+
+        for userId, progressData in pairs(playerProgress) do
+            if not progressData.finished then
+                progressData.roundTimer = i
+            end
+        end
+        wait(1)
+    end
+    
+    -- Конец раунда (логику добавим позже)
+    print("Раунд окончен!")
+    gameInProgress = false
 end
 
-UpdateCountdownUI.OnClientEvent:Connect(onUpdateCountdown)
+-- Функция отсчета в лобби (без изменений)
+local function startLobbyCountdown()
+    countdownInProgress = true
+    for i = COUNTDOWN_SECONDS, 1, -1 do
+        if #playersInLobby == 0 then
+            UpdateCountdownUI:FireAllClients(false)
+            countdownInProgress = false
+            return
+        end
+        UpdateCountdownUI:FireAllClients(i)
+        wait(1)
+    end
+    
+    UpdateCountdownUI:FireAllClients(false)
+    
+    local playersToStart = {}
+    for _, p in ipairs(playersInLobby) do table.insert(playersToStart, p) end
+    
+    setupGame(playersToStart)
+    countdownInProgress = false
+end
 
--- Начальное состояние
-CountdownLabel.Visible = false
+-- Главный цикл проверки лобби (без изменений)
+while true do
+    wait(0.5)
+    if not gameInProgress then
+        local playersFound = {}
+        local touchingParts = Workspace:GetPartsInPart(startGamePlatform)
+        for _, part in ipairs(touchingParts) do
+            local player = Players:GetPlayerFromCharacter(part.Parent)
+            if player and not table.find(playersFound, player) then
+                table.insert(playersFound, player)
+            end
+        end
+        playersInLobby = playersFound
+        
+        if #playersInLobby > 0 and not countdownInProgress then
+            coroutine.wrap(startLobbyCountdown)()
+        end
+    end
+end
