@@ -1,0 +1,78 @@
+-- GameManager (Часть 1: Лобби)
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Настройки
+local COUNTDOWN_SECONDS = 10
+
+-- Ссылки на объекты
+local startGamePlatform = Workspace:WaitForChild("StartGame")
+local buildZones = Workspace:WaitForChild("BuildZones"):GetChildren()
+local UpdateCountdownUI = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("UpdateCountdownUI")
+
+-- Переменные состояния
+local playersInLobby = {}
+local countdownInProgress = false
+local gameInProgress = false -- Пока всегда false
+
+-- Функция телепортации и подготовки к игре
+local function setupGame(playersToPlay)
+    print("Начинаем игру для " .. #playersToPlay .. " игроков!")
+    local availableBuildZones = {}
+    for i=1, #buildZones do table.insert(availableBuildZones, buildZones[i]) end
+
+    for _, player in ipairs(playersToPlay) do
+        if player.Character then
+            local randomIndex = math.random(1, #availableBuildZones)
+            local buildZone = table.remove(availableBuildZones, randomIndex)
+            if buildZone then
+                player.Character:SetPrimaryPartCFrame(buildZone.CFrame + Vector3.new(0, 5, 0))
+                print(player.Name .. " телепортирован в " .. buildZone.Name)
+            end
+        end
+    end
+    -- Здесь позже будет логика старта раунда
+end
+
+-- Функция отсчета в лобби
+local function startLobbyCountdown()
+    countdownInProgress = true
+    for i = COUNTDOWN_SECONDS, 1, -1 do
+        if #playersInLobby == 0 then
+            UpdateCountdownUI:FireAllClients(false)
+            countdownInProgress = false
+            return
+        end
+        UpdateCountdownUI:FireAllClients(i)
+        wait(1)
+    end
+
+    UpdateCountdownUI:FireAllClients(false)
+
+    local playersToStart = {}
+    for _, p in ipairs(playersInLobby) do table.insert(playersToStart, p) end
+
+    setupGame(playersToStart)
+    countdownInProgress = false
+end
+
+-- Главный цикл проверки лобби
+while true do
+    wait(0.5)
+    if not gameInProgress then
+        local playersFound = {}
+        local touchingParts = Workspace:GetPartsInPart(startGamePlatform)
+        for _, part in ipairs(touchingParts) do
+            local player = Players:GetPlayerFromCharacter(part.Parent)
+            if player and not table.find(playersFound, player) then
+                table.insert(playersFound, player)
+            end
+        end
+        playersInLobby = playersFound
+
+        if #playersInLobby > 0 and not countdownInProgress then
+            coroutine.wrap(startLobbyCountdown)()
+        end
+    end
+end
