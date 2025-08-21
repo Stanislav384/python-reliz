@@ -1,47 +1,84 @@
--- Paths to the items
-local WallClose = game.Workspace:WaitForChild("Teleports"):WaitForChild("WallClose")
-local key1 = game.Workspace:WaitForChild("Key1")
-local key2 = game.Workspace:WaitForChild("Key2")
-local key3 = game.Workspace:WaitForChild("Key3")
+-- BuildScript (Локальный скрипт для инструмента)
+local Player = game:GetService("Players").LocalPlayer
+local Mouse = Player:GetMouse()
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
--- Use a simple counter to track collected keys
-local keysCollected = 0
+local PlaceBrickEvent = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("PlaceBrickEvent")
+local Tool = script.Parent
 
--- A single function that handles the 'Touched' event for all keys
-local function onKeyTouched(touchedKey, otherPart)
-	local player = game.Players:GetPlayerFromCharacter(otherPart.Parent)
+local selectedBrick = nil -- Какую деталь игрок выбрал
+local ghostBrick = nil -- Прозрачная копия детали у курсора
 
-	-- Check if a player touched the key and if the key hasn't been collected yet
-	if player and touchedKey.CanCollide == true then
+-- Функция для обновления позиции "призрачной" детали у курсора
+local function updateGhostBrickPosition()
+	if ghostBrick then
+		-- Mouse.Hit - это CFrame (позиция + поворот) того, куда указывает мышь
+		ghostBrick:PivotTo(Mouse.Hit)
+	end
+end
 
-		-- Make the key disappear
-		touchedKey.CanCollide = false
-		touchedKey.Transparency = 1
+-- Функция для очистки выбора (когда деталь поставили или убрали инструмент)
+local function clearSelection()
+	if ghostBrick then
+		ghostBrick:Destroy()
+		ghostBrick = nil
+	end
+	selectedBrick = nil
+	Mouse.Icon = "" -- Возвращаем обычный курсор
+end
 
-		-- Increment the counter
-		keysCollected = keysCollected + 1
+-- Функция, которая срабатывает при клике мыши
+local function onMouseDown()
+	local target = Mouse.Target -- На какую деталь мы нажали
+	if not target then return end
 
-		print("Ключ собран: " .. touchedKey.Name .. ". Всего собрано: " .. keysCollected)
+	-- Проверяем, что у детали есть родитель-модель
+	local targetParent = target.Parent
+	if not targetParent or not targetParent:IsA("Model") then return end
 
-		-- Check if all three keys have been collected
-		if keysCollected >= 3 then
-			print("Все ключи собраны! Стена исчезнет.")
-			WallClose.CanCollide = false
-			WallClose.Transparency = 1
-			WallClose:Destroy()
+	-- СЦЕНАРИЙ 1: Игрок выбрал деталь из своего набора (PartSet)
+	if targetParent.Name == "PartSet_" .. Player.Name then
+		clearSelection() -- Сбрасываем предыдущий выбор, если он был
+		selectedBrick = target
+		
+		-- Создаем "призрачную" копию, которая будет следовать за мышкой
+		ghostBrick = selectedBrick:Clone()
+		ghostBrick.Parent = Workspace
+		-- Делаем ее полупрозрачной и не стикаемой
+		for _, part in ipairs(ghostBrick:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.Transparency = 0.5
+				part.CanCollide = false
+				part.Anchored = true
+			end
+		end
+		-- Устанавливаем иконку мыши в виде молотка (можно поменять ID)
+		Mouse.Icon = "rbxassetid://4998246311"
+
+	-- СЦЕНАРИЙ 2: Игрок ставит выбранную деталь на шаблон (Template)
+	elseif targetParent.Name == "Template_" .. Player.Name and selectedBrick then
+		-- Проверяем, совпадают ли имена детали в руке и детали в шаблоне
+		if target.Name == selectedBrick.Name then
+			-- Имена совпали! Отправляем сигнал на сервер
+			PlaceBrickEvent:FireServer(target.Name) -- Отправляем только имя, этого достаточно
+			clearSelection() -- Очищаем выбор, так как деталь установлена
+		else
+			-- Имена не совпали, игрок пытается поставить не ту деталь
+			print("Неправильная деталь!") -- Можно добавить звук ошибки
 		end
 	end
 end
 
--- Connect the function to the 'Touched' event for each key
-key1.Touched:Connect(function(otherPart)
-	onKeyTouched(key1, otherPart)
+-- Подключаем наши функции к событиям
+Tool.Equipped:Connect(function()
+	-- Когда игрок взял инструмент в руки
+	Mouse.Button1Down:Connect(onMouseDown)
+	RunService.RenderStepped:Connect(updateGhostBrickPosition)
 end)
 
-key2.Touched:Connect(function(otherPart)
-	onKeyTouched(key2, otherPart)
-end)
-
-key3.Touched:Connect(function(otherPart)
-	onKeyTouched(key3, otherPart)
+Tool.Unequipped:Connect(function()
+	-- Когда игрок убрал инструмент
+	clearSelection()
+	-- Здесь нужно будет отключать соединения, но для простоты пока опустим это
 end)
