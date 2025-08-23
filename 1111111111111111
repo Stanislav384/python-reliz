@@ -1,84 +1,87 @@
--- BuildScript (Локальный скрипт для инструмента)
-local Player = game:GetService("Players").LocalPlayer
-local Mouse = Player:GetMouse()
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QSpinBox, QButtonGroup, QRadioButton, QGroupBox
+from PyQt5.QtCore import Qt
 
-local PlaceBrickEvent = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("PlaceBrickEvent")
-local Tool = script.Parent
+# Віджети
+card_width, card_height = 600, 500
+win_card = QWidget()
+win_card.resize(card_width, card_height)
+win_card.move(0,0)
+win_card.setWindowTitle("Memory card")
 
-local selectedBrick = nil -- Какую деталь игрок выбрал
-local ghostBrick = nil -- Прозрачная копия детали у курсора
+menu = QPushButton("Меню")
+btn_sleep = QPushButton("Відпочити")
+box_Minutes = QSpinBox()
+box_Minutes.setValue(30)
+text_minutes = QLabel("хвилин")
+btn_OK = QPushButton("Відповісти")
+lb_Question = QLabel('Запитання')
 
--- Функция для обновления позиции "призрачной" детали у курсора
-local function updateGhostBrickPosition()
-	if ghostBrick then
-		-- Mouse.Hit - это CFrame (позиция + поворот) того, куда указывает мышь
-		ghostBrick:PivotTo(Mouse.Hit)
-	end
-end
+answer_1 = QRadioButton("1")
+answer_2 = QRadioButton("2")
+answer_3 = QRadioButton("3")
+answer_4 = QRadioButton("4")
 
--- Функция для очистки выбора (когда деталь поставили или убрали инструмент)
-local function clearSelection()
-	if ghostBrick then
-		ghostBrick:Destroy()
-		ghostBrick = nil
-	end
-	selectedBrick = nil
-	Mouse.Icon = "" -- Возвращаем обычный курсор
-end
+RadioGroup = QButtonGroup()
+RadioGroup.addButton(answer_1)
+RadioGroup.addButton(answer_2)
+RadioGroup.addButton(answer_3)
+RadioGroup.addButton(answer_4)
 
--- Функция, которая срабатывает при клике мыши
-local function onMouseDown()
-	local target = Mouse.Target -- На какую деталь мы нажали
-	if not target then return end
+Result = QLabel('Правильно')
+Correct = QLabel('відповідь')
 
-	-- Проверяем, что у детали есть родитель-модель
-	local targetParent = target.Parent
-	if not targetParent or not targetParent:IsA("Model") then return end
+# Групи
+RadioGroupBox = QGroupBox("Варіанти відповідей")
+AnsGroupBox = QGroupBox()
+AnsGroupBox.hide()
 
-	-- СЦЕНАРИЙ 1: Игрок выбрал деталь из своего набора (PartSet)
-	if targetParent.Name == "PartSet_" .. Player.Name then
-		clearSelection() -- Сбрасываем предыдущий выбор, если он был
-		selectedBrick = target
-		
-		-- Создаем "призрачную" копию, которая будет следовать за мышкой
-		ghostBrick = selectedBrick:Clone()
-		ghostBrick.Parent = Workspace
-		-- Делаем ее полупрозрачной и не стикаемой
-		for _, part in ipairs(ghostBrick:GetDescendants()) do
-			if part:IsA("BasePart") then
-				part.Transparency = 0.5
-				part.CanCollide = false
-				part.Anchored = true
-			end
-		end
-		-- Устанавливаем иконку мыши в виде молотка (можно поменять ID)
-		Mouse.Icon = "rbxassetid://4998246311"
+# Макети для варіантів відповідей
+layout_ans2 = QVBoxLayout()
+layout_ans3 = QVBoxLayout()
+layout_ans1 = QHBoxLayout()
 
-	-- СЦЕНАРИЙ 2: Игрок ставит выбранную деталь на шаблон (Template)
-	elseif targetParent.Name == "Template_" .. Player.Name and selectedBrick then
-		-- Проверяем, совпадают ли имена детали в руке и детали в шаблоне
-		if target.Name == selectedBrick.Name then
-			-- Имена совпали! Отправляем сигнал на сервер
-			PlaceBrickEvent:FireServer(target.Name) -- Отправляем только имя, этого достаточно
-			clearSelection() -- Очищаем выбор, так как деталь установлена
-		else
-			-- Имена не совпали, игрок пытается поставить не ту деталь
-			print("Неправильная деталь!") -- Можно добавить звук ошибки
-		end
-	end
-end
+layout_ans2.addWidget(answer_1)
+layout_ans2.addWidget(answer_2)
+layout_ans3.addWidget(answer_3)
+layout_ans3.addWidget(answer_4)
 
--- Подключаем наши функции к событиям
-Tool.Equipped:Connect(function()
-	-- Когда игрок взял инструмент в руки
-	Mouse.Button1Down:Connect(onMouseDown)
-	RunService.RenderStepped:Connect(updateGhostBrickPosition)
-end)
+layout_ans1.addLayout(layout_ans2)
+layout_ans1.addLayout(layout_ans3)
 
-Tool.Unequipped:Connect(function()
-	-- Когда игрок убрал инструмент
-	clearSelection()
-	-- Здесь нужно будет отключать соединения, но для простоты пока опустим это
-end)
+RadioGroupBox.setLayout(layout_ans1)
+
+# Макет для результату
+layout_res = QVBoxLayout()
+layout_res.addWidget(Result)
+layout_res.addWidget(Correct)
+AnsGroupBox.setLayout(layout_res)
+
+# Основні макети
+layout_line1 = QHBoxLayout()
+layout_line2 = QHBoxLayout()
+layout_line3 = QHBoxLayout()
+layout_line4 = QHBoxLayout()
+layout_card = QVBoxLayout()
+
+layout_line1.addWidget(menu)
+layout_line1.addStretch(1)
+layout_line1.addWidget(btn_sleep)
+layout_line1.addWidget(box_Minutes)
+layout_line1.addWidget(text_minutes)
+
+layout_line2.addWidget(lb_Question, alignment=(Qt.AlignHCenter | Qt.AlignVCenter))
+layout_line3.addWidget(AnsGroupBox)
+layout_line3.addWidget(RadioGroupBox)
+
+layout_line4.addStretch(1)
+layout_line4.addWidget(btn_OK, stretch=2)
+layout_line4.addStretch(1)
+
+layout_card.addLayout(layout_line1, stretch=1)
+layout_card.addLayout(layout_line2, stretch=2)
+layout_card.addLayout(layout_line3, stretch=8)
+layout_card.addLayout(layout_line4)
+layout_card.setSpacing(5)
+
+win_card.setLayout(layout_card)
+win_card.show()
