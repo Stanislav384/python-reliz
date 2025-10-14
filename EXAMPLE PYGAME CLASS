@@ -2,7 +2,8 @@ import pygame
 pygame.init()
 WIDTH, HEIGHT = 1280, 720
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-background = pygame.transform.scale(pygame.image.load("fon.jpg"), (WIDTH, HEIGHT)),
+background = pygame.image.load("fon.jpg")
+background = pygame.transform.scale(background, (WIDTH, HEIGHT))
 clock = pygame.time.Clock()
 
 
@@ -21,11 +22,9 @@ class GameObject():
         self.isJumping = False
 
     def draw(self):
-        # Малюємо об'єкт на екрані
         screen.blit(self.image, self.rect)
 
     def move(self, dx):
-        # Рухаємо об'єкт по осі X
         self.rect.x += dx
         if dx > 0:
             self.image = self.image_right
@@ -35,18 +34,14 @@ class GameObject():
             self.facing_right = False
 
     def apply_gravity(self):
-        # Додаємо гравітацію
         self.velocity_y += GRAVITY
         self.rect.y += self.velocity_y
-
-        # Перевірка чи персонаж не нижче землі
         if self.rect.y >= GROUND_Y:
             self.rect.y = GROUND_Y
             self.velocity_y = 0
             self.isJumping = False
 
     def jump(self):
-        # Стрибок
         if not self.isJumping:
             self.velocity_y = JUMP_POWER
             self.isJumping = True
@@ -59,12 +54,10 @@ GRAVITY = 1
 JUMP_POWER = -20
 GROUND_Y = 400
 
-# Створюємо гравця і портал
 player = GameObject("player.png", player_x, player_y, 230, 230)
 
 start = True
 while start:
-    # Малюємо поточний фон
     screen.blit(background, (0, 0))
     player.draw()
 
@@ -73,7 +66,6 @@ while start:
             start = False  # Вихід з гри
 
         elif event.type == pygame.KEYDOWN:
-            # Натискання кнопок
             if event.key == pygame.K_d:
                 player_forward = 5  # Рух праворуч
             elif event.key == pygame.K_a:
