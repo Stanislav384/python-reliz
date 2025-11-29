@@ -1,90 +1,130 @@
---!strict
+import sys
+from PyQt5.QtCore import QUrl
+from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog
+from ui import Ui_MainWindow
+import os 
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap 
+from PIL import Image, ImageFilter
 
-local tool = script.Parent
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Debris = game:GetService("Debris")
+class ImageProcessor():
+    def __init__(self):
+        self.image = None 
+        self.dir = None 
+        self.filename = None 
+        self.save_dir = "Modified/"
 
--- Объект-образец для создания, находится в ReplicatedStorage. 
--- Вы можете добавить туда свои модели, части и т.д.
-local brickTemplate = ReplicatedStorage:FindFirstChild("MyAwesomePart") 
-if not brickTemplate then
-	warn("Объект 'MyAwesomePart' не найден в ReplicatedStorage! Будет создан обычный Part.")
-end
+    def loadImage(self, dir, filename):
+        self.dir = dir 
+        self.filename = filename 
+        image_path = os.path.join(dir, filename)
+        self.image = Image.open(image_path)
+    
+    def showImage(self, label_widget, path):
+        label_widget.hide()
+        pixmapimage = QPixmap(path)
+        w, h = label_widget.width(), label_widget.height()
 
-local MIN_CAST_DISTANCE = 5
-local MAX_CAST_DISTANCE = 50
+        pixmapimage = pixmapimage.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        label_widget.setPixmap(pixmapimage)
+        label_widget.show()
+    
+    def saveImage(self):
+        path = os.path.join(self.dir, self.save_dir)
+        if not os.path.exists(path) or not os.path.isdir(path):
+            os.mkdir(path)
+        image_path = os.path.join(path, self.filename)
+        self.image.save(image_path, quality=95)
+        return image_path
 
--- Создаем локальный эффект спавна
-local function createSpawnEffect(position: Vector3)
-	local effectPart = Instance.new("Part")
-	effectPart.Position = position
-	effectPart.Size = Vector3.new(2, 2, 2)
-	effectPart.Transparency = 1
-	effectPart.CanCollide = false
-	effectPart.Anchored = true
-	effectPart.Parent = workspace
 
-	local light = Instance.new("PointLight")
-	light.Color = BrickColor.Random().Color
-	light.Range = 25
-	light.Brightness = 5
-	light.Parent = effectPart
+    def do_left(self):
+        self.image = self.image.transpose(Image.ROTATE_90)
+        return self.saveImage()
+    
+    def do_right(self):
+        self.image = self.image.transpose(Image.ROTATE_270)
+        return self.saveImage()
+    
+    def do_flip(self):
+        self.image = self.image.transpose(Image.FLIP_LEFT_RIGHT)
+        return self.saveImage()
+    
 
-	local spark = Instance.new("SparklesEffect")
-	spark.Enabled = true
-	spark.SparkleColor = light.Color
-	spark.Parent = effectPart
+class Widget(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.ui = Ui_MainWindow()
+        self.ui.setupUi(self)
+        self.configure()
+        self.workdir = ''
+        self.workimage = ImageProcessor()
+        # ЦЕ РОЗМІР ФОТО!
+        self.ui.image.resize(600, 400)
+        # ЦЕ ЗДВИГ ФОТО! 
+        self.ui.image.move(180, 60)
+        
+    def configure(self):
+        self.ui.open_folder.clicked.connect(self.showFilenamesList)
+        self.ui.list_image.currentRowChanged.connect(self.showChosenImage)
+        # ДОДАЄМО ФУНКЦІОНАЛ ДЛЯ КНОПОК)
+        self.ui.rotate_left.clicked.connect(self.work_left)
+        self.ui.rotate_right.clicked.connect(self.work_right)
+        self.ui.mirror_image.clicked.connect(self.work_mirror)
+        # self.ui.sharpness_image.clicked.connect()
+        # self.ui.black_white.clicked.connect()
+        
+    def work_left(self):
+        path = self.workimage.do_left()
+        self.workimage.showImage(self.ui.image, path)
 
-	Debris:AddItem(effectPart, 1) -- Эффект исчезнет через 1 секунду
-end
+    def work_right(self):
+        path = self.workimage.do_right()
+        self.workimage.showImage(self.ui.image, path)
 
--- Главная функция
-local function onActivated()
-	local player = Players.LocalPlayer
-	local character = player.Character
-	local mouse = player:GetMouse()
+    def work_mirror(self):
+        path = self.workimage.do_flip()
+        self.workimage.showImage(self.ui.image, path)
+    
+    def filter(self, files, extensions):
+        result = []
+        for filename in files:
+            for ext in extensions:
+                if filename.lower().endswith(ext):
+                    result.append(filename)
+                    break 
+        return result 
+    
+    def showFilenamesList(self):
+        # 1. Спочатку отримую папку яку я вибрав.
+        dir_path = QFileDialog.getExistingDirectory(self, "Оберіть папку: ")
+        # 2. Перевіряю чи я взагалі щось вибрав. (вибрав папку)
+        if dir_path:
+            # 3. Якщо я вибрав папку, то я з dir_path (тут посилання на папку) переносю в workdir
+            self.workdir = dir_path 
+            # 4. Це розширення фото які я буду потім фільтрувати.
+            extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp']
+            # 5. Витягую УСІ файли (без фільтру) і зберігаю їх у змінну.
+            all_files_in_dir = os.listdir(self.workdir)
+            # 6. Фільтрація (З нею я отримаю ТІЛЬКИ ті файли в яких є формат вказаний в extensions)
+            filenames = self.filter(all_files_in_dir, extensions)
+            # 7. Оновлення списку на екрані.
+            self.ui.list_image.clear()
+            self.ui.list_image.addItems(filenames)
+    
+    def showChosenImage(self):
+        if self.ui.list_image.currentRow() >= 0:
+            filename = self.ui.list_image.currentItem().text()
+            self.workimage.loadImage(self.workdir, filename)
+            image_path = os.path.join(self.workimage.dir, self.workimage.filename)
+            self.workimage.showImage(self.ui.image, image_path)
 
-	if not character or not mouse.Target then return end
 
-	-- Проверяем расстояние, чтобы не спавнить слишком далеко
-	local distance = (mouse.Hit.Position - character.HumanoidRootPart.Position).Magnitude
-	if distance < MIN_CAST_DISTANCE or distance > MAX_CAST_DISTANCE then
-		print("Невозможно создать объект. Кликните на что-то в пределах " .. MAX_CAST_DISTANCE .. " студ.")
-		return
-	end
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    ex = Widget()
+    ex.show()
+    sys.exit(app.exec_())
 
-	local newObject: Part | Model
 
-	-- Клонируем объект из ReplicatedStorage, если он существует
-	if brickTemplate then
-		newObject = brickTemplate:Clone()
-	else
-		-- Если нет, создаем обычную часть
-		newObject = Instance.new("Part")
-		newObject.Size = Vector3.new(4, 4, 4)
-	end
 
-	newObject.CFrame = mouse.Hit -- Размещаем объект прямо в точке клика
-	newObject.Anchored = false
-	newObject.BrickColor = BrickColor.Random()
-	newObject.Parent = workspace
-
-	createSpawnEffect(newObject.Position)
-
-	-- Добавляем возможность временного существования или другие свойства
-	-- например, для Part можно создать скрипт, чтобы он взрывался
-	if newObject:IsA("Part") then
-		local destroyScript = Instance.new("Script")
-		destroyScript.Parent = newObject
-		destroyScript.Source = [[
-            wait(5) -- Взорвется через 5 секунд
-            local explosion = Instance.new("Explosion")
-            explosion.Parent = script.Parent.Parent
-            explosion.Position = script.Parent.Position
-            script.Parent:Destroy()
-        ]]
-	end
-end
-
-tool.Activated:Connect(onActivated)
