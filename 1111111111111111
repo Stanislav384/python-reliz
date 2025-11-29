@@ -50,6 +50,13 @@ class ImageProcessor():
         self.image = self.image.transpose(Image.FLIP_LEFT_RIGHT)
         return self.saveImage()
     
+    def do_bw(self):
+        self.image = self.image.convert("L")
+        return self.saveImage()
+    
+    def do_sharpen(self):
+        self.image = self.image.filter(ImageFilter.SHARPEN)
+        return self.saveImage()
 
 class Widget(QMainWindow):
     def __init__(self):
@@ -71,9 +78,10 @@ class Widget(QMainWindow):
         self.ui.rotate_left.clicked.connect(self.work_left)
         self.ui.rotate_right.clicked.connect(self.work_right)
         self.ui.mirror_image.clicked.connect(self.work_mirror)
-        # self.ui.sharpness_image.clicked.connect()
-        # self.ui.black_white.clicked.connect()
-        
+        self.ui.sharpness_image.clicked.connect(self.work_sharpen)
+        self.ui.black_white.clicked.connect(self.work_bw)
+
+
     def work_left(self):
         path = self.workimage.do_left()
         self.workimage.showImage(self.ui.image, path)
@@ -86,6 +94,15 @@ class Widget(QMainWindow):
         path = self.workimage.do_flip()
         self.workimage.showImage(self.ui.image, path)
     
+    def work_bw(self):
+        path = self.workimage.do_bw()
+        self.workimage.showImage(self.ui.image, path)
+
+    def work_sharpen(self):
+        path = self.workimage.do_sharpen()
+        self.workimage.showImage(self.ui.image, path)
+    
+
     def filter(self, files, extensions):
         result = []
         for filename in files:
