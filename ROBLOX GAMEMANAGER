@@ -1,0 +1,583 @@
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DataStoreService = game:GetService("DataStoreService")
+local MarketplaceService = game:GetService("MarketplaceService")
+
+local coinDataStore = DataStoreService:GetDataStore("PlayerCombinedData_V1")
+local playerData = {}
+
+-- ТУТ НАЛАШТУВАННЯ ГРИ.
+local MIN_PLAYERS_TO_START = 2
+local COUNTDOWN_SECONDS = 10
+local ROUND_DURATION = 300
+local RESULTS_DURATION = 10
+
+-- ТАБЛИЦА ПРОДУКТОВ ДЛЯ ПОКУПКИ МОНЕТ
+local ROBUX_PRODUCTS = {
+	-- ID продукта = Количество монет
+	[3475238143] = 500,
+	[3475240727] = 2000,
+	[3475242538] = 4500,
+	[3475245522] = 10000,
+	[3475248481] = 25000,
+	[3475250741] = 60000,
+}
+
+
+-- 1. ДОДАВАННЯ ІНСТРУМЕНТА (ТУЛ) В РУКИ.
+local SET_CONFIG = {
+	BrickSet1 = {
+		Price = 0,
+		ToolName = "DefaultSet",
+		Rewards = { [1] = 100, [2] = 75, [3] = 50, Default = 10 }
+	},
+	BrickSet2 = {
+		Price = 6000,
+		ToolName = "GardernSet",
+		Rewards = { [1] = 800, [2] = 450, [3] = 225, Default = 30 }
+	},
+	BrickSet3 = {
+		Price = 2000,
+		ToolName = "OfficeSet",
+		Rewards = { [1] = 300, [2] = 175, [3] = 100, Default = 15 }
+	},
+	BrickSet4 = {
+		Price = 15000,
+		ToolName = "HouseSet",
+		Rewards = { [1] = 1500, [2] = 800, [3] = 400, Default = 40 }
+	},
+	BrickSet5 = {
+		Price = 500,
+		ToolName = "TreeSet",
+		Rewards = { [1] = 150, [2] = 100, [3] = 60, Default = 10 }
+	},
+	BrickSet6 = {
+		Price = 3000,
+		ToolName = "HospitalSet",
+		Rewards = { [1] = 500, [2] = 275, [3] = 150, Default = 20 }
+	},
+}
+----------------------------------------------------------
+
+
+local startGamePlatform = Workspace:WaitForChild("StartGame")
+local buildZonesFolder = Workspace:WaitForChild("BuildZones")
+local spawnZonesFolder = Workspace:WaitForChild("SpawnZones")
+local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
+
+local UpdateCountdownUI = RemoteEvents:WaitForChild("UpdateCountdownUI")
+local UpdateGameUIEvent = RemoteEvents:WaitForChild("UpdateGameUIEvent")
+local PlaceBrickEvent = RemoteEvents:WaitForChild("PlaceBrickEvent")
+local UpdateCoinsUI = RemoteEvents:WaitForChild("UpdateCoinsUI")
+
+local ToolsFolder = ReplicatedStorage:WaitForChild("Tools")
+local BuySetEvent = RemoteEvents:WaitForChild("BuySetEvent")
+local UpdateShopUI = RemoteEvents:WaitForChild("UpdateShopUI")
+local BrickSets = ReplicatedStorage:WaitForChild("BrickSets")
+
+local BuilderToolTemplate = ToolsFolder:WaitForChild("BuilderTool")
+
+-- 2. КООРДИНАТИ ПОСТРОЙКИ БРІКСЕТІВ (ВЫСОТА Y).
+local SET_WORLD_Y_COORDINATES = {
+	BrickSet1 = -40.5,
+	BrickSet2 = -40.5,
+	BrickSet3 = -38.5,
+	BrickSet4 = -33.5,
+	BrickSet5 = -29.5,
+	BrickSet6 = -40.5,
+}
+local DEFAULT_WORLD_Y = -40.5
+
+-- 3. ВІДСТАВЬ МІЖ БРІКСЕТУ ТА ЙОГО ШАБЛОНУ (Довжина Х).
+local SET_PART_OFFSETS = {
+	BrickSet1 = 30,
+	BrickSet2 = 30,
+	BrickSet3 = 30,
+	BrickSet4 = 55, 
+	BrickSet5 = 30,
+	BrickSet6 = 30,
+}
+local DEFAULT_OFFSET = 30
+
+
+
+local countdownInProgress = false
+local gameInProgress = false
+local playerProgress = {}
+local activePlayers = {}
+
+
+
+local function giveCoinsToPlayer(player, amount)
+	local userId = player.UserId
+	if playerData[userId] then
+		playerData[userId].Coins = playerData[userId].Coins + amount
+		UpdateCoinsUI:FireClient(player, playerData[userId].Coins)
+		print(player.Name .. " успешно получил " .. amount .. " монет.")
+		return true
+	end
+	return false
+end
+
+
+local function processReceipt(purchaseInfo)
+	local playerId = purchaseInfo.PlayerId
+	local productId = purchaseInfo.ProductId
+	local player = Players:GetPlayerByUserId(playerId)
+
+	local coinsReward = ROBUX_PRODUCTS[productId] 
+
+	if coinsReward then
+		if player then
+			local success = giveCoinsToPlayer(player, coinsReward)
+			if success then
+				print(string.format("Покупка подтверждена. Игроку %s выдано %d монет.", player.Name, coinsReward))
+				return Enum.ProductPurchaseDecision.PurchaseGranted
+			else
+				warn("Ошибка: нет данных игрока в таблице playerData при покупке.")
+				return Enum.ProductPurchaseDecision.NotProcessedYet 
+			end
+		else
+			warn("Игрок вышел, обработка покупки отложена для ID: " .. playerId)
+			return Enum.ProductPurchaseDecision.NotProcessedYet
+		end
+	end
+
+	return Enum.ProductPurchaseDecision.NotProcessedYet
+end
+
+
+MarketplaceService.ProcessReceipt = processReceipt
+
+
+local function giveOwnedTools(player)
+	local userId = player.UserId
+	if not playerData[userId] then return end
+
+	local backpack = player:WaitForChild("Backpack")
+	local starterGear = player:WaitForChild("StarterGear")
+
+	for _, setName in ipairs(playerData[userId].OwnedSets) do
+		local config = SET_CONFIG[setName]
+		if config then
+			local toolName = config.ToolName
+			local toolTemplate = ToolsFolder:FindFirstChild(toolName)
+
+			if toolTemplate then
+				local hasInBackpack = backpack:FindFirstChild(toolName)
+				local hasInHand = player.Character and player.Character:FindFirstChild(toolName)
+
+				if not hasInBackpack and not hasInHand then
+					toolTemplate:Clone().Parent = backpack
+				end
+
+				if not starterGear:FindFirstChild(toolName) then
+					toolTemplate:Clone().Parent = starterGear
+				end
+			end
+		end
+	end
+end
+
+local function removePlayerFromRound(player)
+	if not gameInProgress then return end
+
+	if playerProgress[player.UserId] then
+		print("[GameManager] Игрок покинул матч: " .. player.Name)
+
+		UpdateGameUIEvent:FireAllClients("UpdateMessage", player.Name .. " покинул режим.")
+
+		local t = Workspace:FindFirstChild("Template_" .. player.Name)
+		local p = Workspace:FindFirstChild("PartSet_" .. player.Name)
+		if t then t:Destroy() end
+		if p then p:Destroy() end
+
+		if player.Backpack:FindFirstChild("BuilderTool") then
+			player.Backpack.BuilderTool:Destroy()
+		end
+		if player.Character and player.Character:FindFirstChild("BuilderTool") then
+			player.Character.BuilderTool:Destroy()
+		end
+
+		playerProgress[player.UserId] = nil
+
+		for i, p in ipairs(activePlayers) do
+			if p == player then
+				table.remove(activePlayers, i)
+				break
+			end
+		end
+
+		UpdateGameUIEvent:FireAllClients("UpdateLeaderboard", playerProgress)
+	end
+end
+
+local function onPlaceBrick(player, brickName)
+	if not gameInProgress or not playerProgress[player.UserId] or playerProgress[player.UserId].finished then return end
+	local playerPartSet = Workspace:FindFirstChild("PartSet_" .. player.Name)
+	local playerTemplate = Workspace:FindFirstChild("Template_" .. player.Name)
+	if not playerPartSet or not playerTemplate then return end
+
+	local originalBrick = playerPartSet:FindFirstChild(brickName, true)
+	local templateBrick = playerTemplate:FindFirstChild(brickName, true)
+
+	if templateBrick and originalBrick and not templateBrick:GetAttribute("IsPlaced") then
+		templateBrick.Transparency = 0
+		templateBrick.CanCollide = true
+		templateBrick:SetAttribute("IsGameAsset", true)
+		templateBrick:SetAttribute("IsPlaced", true)
+		originalBrick:Destroy()
+		table.insert(playerProgress[player.UserId].placedBricks, brickName)
+		local totalParts = playerTemplate:GetAttribute("TotalParts") or 0
+		if #playerProgress[player.UserId].placedBricks >= totalParts then
+			local finishedPlayersCount = 0
+			for _, data in pairs(playerProgress) do
+				if data.finished then finishedPlayersCount = finishedPlayersCount + 1 end
+			end
+			playerProgress[player.UserId].finished = true
+			playerProgress[player.UserId].finishPlace = finishedPlayersCount + 1
+			playerProgress[player.UserId].timeTaken = ROUND_DURATION - playerProgress[player.UserId].roundTimer
+			UpdateGameUIEvent:FireAllClients("UpdateLeaderboard", playerProgress)
+		end
+	end
+end
+PlaceBrickEvent.OnServerEvent:Connect(onPlaceBrick)
+
+
+local function cleanupMap()
+	for _, child in ipairs(Workspace:GetChildren()) do
+		if child:GetAttribute("IsGameAsset") then child:Destroy() end
+	end
+end
+
+local function setupGame(playersToPlay)
+	gameInProgress = true
+	playerProgress = {}
+	activePlayers = playersToPlay
+
+	local buildZones = buildZonesFolder:GetChildren()
+	local spawnZones = spawnZonesFolder:GetChildren()
+	table.sort(buildZones, function(a, b) return a.Name < b.Name end)
+	table.sort(spawnZones, function(a, b) return a.Name < b.Name end)
+
+	for i, player in ipairs(playersToPlay) do
+		if player.Character then
+			local spawnZone = spawnZones[i]
+			local buildZone = buildZones[i]
+			if buildZone and spawnZone then
+				player.Character:PivotTo(spawnZone.CFrame * CFrame.new(0, 3, 0))
+
+				local selectedSetName = "BrickSet1"
+				local heldTool = player.Character:FindFirstChildWhichIsA("Tool")
+
+				if heldTool then
+					print(string.format("[GameManager] У игрока %s в руках: %s", player.Name, heldTool.Name))
+					local foundMatch = false
+					for setName, config in pairs(SET_CONFIG) do
+						if config.ToolName == heldTool.Name then
+							selectedSetName = setName
+							foundMatch = true
+							break
+						end
+					end
+					if not foundMatch then
+						print("[GameManager] Инструмент в руках не относится к игре. Использую Default.")
+					end
+				else
+					print(string.format("[GameManager] У игрока %s пустые руки. Использую Default.", player.Name))
+				end
+
+				local templateSource = BrickSets:FindFirstChild(selectedSetName .. "_Template")
+				local partSetSource = BrickSets:FindFirstChild(selectedSetName)
+
+				if not templateSource or not partSetSource then
+					warn(string.format("[GameManager] ОШИБКА: Не найден набор '%s'. Выдаю BrickSet1.", selectedSetName))
+					templateSource = BrickSets:FindFirstChild("BrickSet1_Template")
+					partSetSource = BrickSets:FindFirstChild("BrickSet1")
+					selectedSetName = "BrickSet1"
+				end
+
+				print(string.format("--- [GameManager] Игрок %s БУДЕТ СТРОИТЬ: %s ---", player.Name, selectedSetName))
+
+				local targetY = SET_WORLD_Y_COORDINATES[selectedSetName] or DEFAULT_WORLD_Y
+
+				local offset = SET_PART_OFFSETS[selectedSetName] or DEFAULT_OFFSET
+
+				local templateTargetPos = Vector3.new(buildZone.CFrame.Position.X, targetY, buildZone.CFrame.Position.Z)
+
+
+				local partSetTargetPos = Vector3.new(buildZone.CFrame.Position.X + offset, targetY, buildZone.CFrame.Position.Z)
+
+				local zoneRotation = buildZone.CFrame - buildZone.CFrame.Position
+				local templateTargetCFrame = CFrame.new(templateTargetPos) * zoneRotation
+				local partSetTargetCFrame = CFrame.new(partSetTargetPos) * zoneRotation
+
+				local template = templateSource:Clone()
+				template.Name = "Template_" .. player.Name
+				template:SetAttribute("IsGameAsset", true)
+				template.Parent = Workspace
+				template:PivotTo(templateTargetCFrame)
+
+				local partSet = partSetSource:Clone()
+				partSet.Name = "PartSet_" .. player.Name
+				partSet:SetAttribute("IsGameAsset", true)
+				partSet.Parent = Workspace
+				partSet:PivotTo(partSetTargetCFrame)
+
+				local partCount = 0
+				for _, part in ipairs(template:GetDescendants()) do
+					if part:IsA("BasePart") then
+						part.Transparency = 0.7
+						partCount = partCount + 1
+					end
+				end
+				template:SetAttribute("TotalParts", partCount)
+
+				if BuilderToolTemplate then
+					local newBuilderTool = BuilderToolTemplate:Clone()
+					newBuilderTool.Parent = player.Backpack
+
+					local humanoid = player.Character:FindFirstChild("Humanoid")
+					if humanoid then
+						humanoid:EquipTool(newBuilderTool)
+					end
+				else
+					warn("[GameManager] ОШИБКА: BuilderTool не найден в ReplicatedStorage/Tools!")
+				end
+
+				playerProgress[player.UserId] = {
+					playerName = player.Name,
+					setName = selectedSetName,
+					placedBricks = {},
+					finished = false,
+					timeTaken = 0,
+					roundTimer = ROUND_DURATION,
+					finishPlace = 0
+				}
+			end
+		end
+	end
+	UpdateGameUIEvent:FireAllClients("UpdateLeaderboard", playerProgress)
+
+	for i = ROUND_DURATION, 0, -1 do
+		if #activePlayers == 0 then
+			break
+		end
+
+		local minutes = math.floor(i / 60)
+		local seconds = i % 60
+		local timerText = string.format("%02d:%02d", minutes, seconds)
+		UpdateGameUIEvent:FireAllClients("UpdateTimer", "Round: " .. timerText)
+
+		local allFinished = true
+		for _, data in pairs(playerProgress) do
+			if not data.finished then
+				allFinished = false;
+				data.roundTimer = i
+			end
+		end
+		if allFinished then break end
+		task.wait(1)
+	end
+
+	UpdateGameUIEvent:FireAllClients("HideLeaderboard")
+	task.wait(1)
+	local finalResults = {}
+	for userId, data in pairs(playerProgress) do
+		data.UserId = userId
+		table.insert(finalResults, data)
+	end
+	table.sort(finalResults, function(a, b)
+		if a.finished ~= b.finished then return a.finished
+		elseif a.finished then return a.finishPlace < b.finishPlace
+		else return #a.placedBricks > #b.placedBricks
+		end
+	end)
+
+	for place, resultData in ipairs(finalResults) do
+		local player = Players:GetPlayerByUserId(resultData.UserId)
+
+		if player and playerData[player.UserId] then
+			local setName = resultData.setName
+			local setConfig = SET_CONFIG[setName] or SET_CONFIG.BrickSet1
+			local rewardTable = setConfig.Rewards
+			local reward = rewardTable[place] or rewardTable.Default
+
+			giveCoinsToPlayer(player, reward)
+
+			UpdateGameUIEvent:FireClient(player, "UpdateMessage", string.format("Вы получили %d монет за %d место!", reward, place))
+		end
+	end
+
+	UpdateGameUIEvent:FireAllClients("ShowFinalResults", finalResults)
+	task.wait(RESULTS_DURATION)
+	cleanupMap()
+
+	for _, player in ipairs(activePlayers) do
+		if player.Backpack:FindFirstChild("BuilderTool") then
+			player.Backpack.BuilderTool:Destroy()
+		end
+		if player.Character and player.Character:FindFirstChild("BuilderTool") then
+			player.Character.BuilderTool:Destroy()
+		end
+	end
+
+	for _, player in ipairs(activePlayers) do
+		if player and player.Character then
+			local randomOffset = Vector3.new(math.random(-5, 5), 5, math.random(-5, 5))
+			player.Character:PivotTo(startGamePlatform.CFrame * CFrame.new(randomOffset))
+		end
+	end
+	gameInProgress = false
+	activePlayers = {}
+end
+
+
+local function startLobbyCountdown(playersToStart)
+	countdownInProgress = true
+	for i = COUNTDOWN_SECONDS, 1, -1 do
+		if #Workspace:GetPartsInPart(startGamePlatform) < MIN_PLAYERS_TO_START then
+			UpdateCountdownUI:FireAllClients("Waiting for players...")
+			countdownInProgress = false
+			return
+		end
+		UpdateCountdownUI:FireAllClients(i)
+		task.wait(1)
+	end
+	UpdateCountdownUI:FireAllClients(false)
+	coroutine.wrap(setupGame)(playersToStart)
+	countdownInProgress = false
+end
+
+
+local function onPlayerAdded(player)
+	local userId = player.UserId
+	local data
+
+	player.CharacterAdded:Connect(function()
+		if gameInProgress and playerProgress[userId] then
+			removePlayerFromRound(player)
+		end
+		task.wait(0.5)
+
+		if playerData[userId] then
+			UpdateCoinsUI:FireClient(player, playerData[userId].Coins)
+			UpdateShopUI:FireClient(player, playerData[userId].OwnedSets)
+			giveOwnedTools(player)
+		end
+	end)
+
+	local success, err = pcall(function()
+		data = coinDataStore:GetAsync(userId)
+	end)
+
+	if success then
+		if type(data) == "table" and data.Coins and data.OwnedSets then
+			playerData[userId] = data
+		else
+			local oldCoins = (type(data) == "number") and data or 0
+			playerData[userId] = {
+				Coins = oldCoins,
+				OwnedSets = {"BrickSet1"}
+			}
+		end
+	else
+		warn("Ошибка загрузки данных DataStore для " .. player.Name .. ": " .. err)
+		playerData[userId] = {
+			Coins = 0,
+			OwnedSets = {"BrickSet1"}
+		}
+	end
+
+	giveOwnedTools(player)
+
+	UpdateCoinsUI:FireClient(player, playerData[userId].Coins)
+	UpdateShopUI:FireClient(player, playerData[userId].OwnedSets)
+end
+
+
+local function onBuySet(player, setName)
+	local userId = player.UserId
+	local config = SET_CONFIG[setName]
+	local pData = playerData[userId]
+
+	if not config or not pData then return end
+
+	local alreadyOwned = false
+	for _, ownedSet in ipairs(pData.OwnedSets) do
+		if ownedSet == setName then
+			alreadyOwned = true
+			break
+		end
+	end
+
+	if alreadyOwned then
+		return
+	end
+
+	if pData.Coins >= config.Price then
+		pData.Coins = pData.Coins - config.Price
+		table.insert(pData.OwnedSets, setName)
+
+		giveOwnedTools(player)
+
+		UpdateCoinsUI:FireClient(player, pData.Coins)
+		UpdateShopUI:FireClient(player, pData.OwnedSets)
+	else
+		print(string.format("[GameManager] У игрока %s не хватает %d монет для %s", player.Name, config.Price - pData.Coins, setName))
+	end
+end
+
+
+local function savePlayerData(player)
+	local userId = player.UserId
+	if playerData[userId] then
+		local success, err = pcall(function()
+			coinDataStore:SetAsync(userId, playerData[userId])
+		end)
+		if not success then
+			warn("Error saving data for " .. player.Name .. ": " .. err)
+		end
+	end
+end
+
+local function onPlayerRemoving(player)
+	removePlayerFromRound(player)
+	savePlayerData(player)
+	playerData[player.UserId] = nil
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(onPlayerRemoving)
+BuySetEvent.OnServerEvent:Connect(onBuySet)
+PlaceBrickEvent.OnServerEvent:Connect(onPlaceBrick)
+
+game:BindToClose(function()
+	if gameInProgress then task.wait(3) end
+	for _, player in ipairs(Players:GetPlayers()) do
+		savePlayerData(player)
+	end
+end)
+
+while true do
+	task.wait(0.5)
+	if not gameInProgress and not countdownInProgress then
+		local playersFound = {}
+		local touchingParts = Workspace:GetPartsInPart(startGamePlatform)
+		for _, part in ipairs(touchingParts) do
+			local player = Players:GetPlayerFromCharacter(part.Parent)
+			if player and not table.find(playersFound, player) then
+				table.insert(playersFound, player)
+			end
+		end
+
+		if #playersFound >= MIN_PLAYERS_TO_START then
+			coroutine.wrap(startLobbyCountdown)(playersFound)
+		elseif #playersFound > 0 then
+			UpdateCountdownUI:FireAllClients("Waiting for players...")
+		else
+			UpdateCountdownUI:FireAllClients(false)
+		end
+	end
+end
