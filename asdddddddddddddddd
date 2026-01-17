@@ -1,0 +1,292 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+
+print("--- [DEBUG] ЗАПУСК СКРИПТА ИНТЕРФЕЙСА (FINAL) ---")
+
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+local shopGui = script.Parent
+
+-- == 1. ПОИСК ВНЕШНИХ ИНТЕРФЕЙСОВ (Для анимации) ==
+local RewardGui = PlayerGui:WaitForChild("RewardGui", 5)
+local InventoryGui = PlayerGui:WaitForChild("Inventory Gui", 5)
+local BackpackButton = nil
+
+-- Настраиваем RewardGui
+local RewardBg, RewardCard, RewardName, ClaimButton, RaysImage
+if RewardGui then
+	RewardBg = RewardGui:WaitForChild("Background", 5)
+	if RewardBg then
+		RewardCard = RewardBg:WaitForChild("ItemCard", 5)
+		RewardName = RewardBg:WaitForChild("ItemName", 5)
+		ClaimButton = RewardBg:WaitForChild("ClaimButton", 5)
+		RaysImage = RewardBg:FindFirstChild("Rays")
+	end
+else
+	warn("⚠️ RewardGui не найден! Анимации награды не будет.")
+end
+
+-- Настраиваем кнопку Рюкзака
+if InventoryGui then
+	BackpackButton = InventoryGui:WaitForChild("Backpack", 5)
+else
+	warn("⚠️ Inventory Gui не найден! Предмет не полетит в рюкзак.")
+end
+
+-- Эффект размытия
+local ShopBlur = Lighting:FindFirstChild("ShopBlur")
+if not ShopBlur then
+	ShopBlur = Instance.new("BlurEffect", Lighting)
+	ShopBlur.Name = "ShopBlur"
+	ShopBlur.Size = 0
+end
+
+-- == 2. ОСНОВНЫЕ ФРЕЙМЫ МАГАЗИНА ==
+local ChoiceFrame = shopGui:WaitForChild("ChoiceFrame")
+local LTBrickSetsShop = shopGui:WaitForChild("LTBrickSetsShop")
+local SnowBricksShop = shopGui:WaitForChild("SnowBricksShop")
+local InviteShop = shopGui:WaitForChild("InviteShop")
+
+local OpenShopButton = shopGui:WaitForChild("OpenChristmasShop")
+
+-- ВНИМАНИЕ: Названия кнопок строго как на твоем скриншоте
+local RBBrickSetButton = ChoiceFrame:WaitForChild("RBBricksetButton")      -- s маленькая
+local RBSnowBricksButton = ChoiceFrame:WaitForChild("RBSnowsBricksButton") -- Snows c 's'
+local RBInviteButton = ChoiceFrame:WaitForChild("RBInviteButton")
+
+local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
+local BuySetEvent = RemoteEvents:WaitForChild("BuySetEvent")
+local UpdateShopUI = RemoteEvents:WaitForChild("UpdateShopUI")
+
+local currentRewardSession = 0
+local rotationConnection = nil
+
+
+-- ==========================================
+-- === АНИМАЦИЯ ПОЛЕТА ===
+-- ==========================================
+local function playCoolFlyAnimation(imageAssetId)
+	if not BackpackButton then return end
+
+	-- Создаем слой анимации
+	local animGui = Instance.new("ScreenGui")
+	animGui.Name = "AnimationLayer"
+	animGui.IgnoreGuiInset = true
+	animGui.DisplayOrder = 1000
+	animGui.Parent = PlayerGui
+
+	-- Создаем летающую картинку
+	local clone = Instance.new("ImageLabel")
+	clone.Name = "FlyAnimItem"
+	clone.BackgroundTransparency = 1
+	clone.Image = imageAssetId or "rbxassetid://0"
+	clone.Parent = animGui
+	clone.AnchorPoint = Vector2.new(0.5, 0.5)
+
+	-- Старт (центр экрана)
+	local startX = workspace.CurrentCamera.ViewportSize.X / 2
+	local startY = workspace.CurrentCamera.ViewportSize.Y / 2
+	clone.Size = UDim2.fromOffset(150, 150)
+	clone.Position = UDim2.fromOffset(startX, startY)
+
+	-- Цель (Кнопка рюкзака)
+	local targetPos = BackpackButton.AbsolutePosition
+	local targetSize = BackpackButton.AbsoluteSize
+	local targetCenterX = targetPos.X + (targetSize.X / 2)
+	local targetCenterY = targetPos.Y + (targetSize.Y / 2)
+
+	-- Корректировка на верхнюю панель (36px)
+	targetCenterY = targetCenterY + 36 
+
+	local tweenInfo = TweenInfo.new(0.8, Enum.EasingStyle.Cubic, Enum.EasingDirection.In)
+	local goal = {
+		Position = UDim2.fromOffset(targetCenterX, targetCenterY),
+		Size = UDim2.fromOffset(50, 50),
+		Rotation = -360,
+		ImageTransparency = 0.5
+	}
+
+	local tween = TweenService:Create(clone, tweenInfo, goal)
+	tween:Play()
+
+	tween.Completed:Connect(function()
+		-- Удар по рюкзаку
+		local originalSize = BackpackButton.Size
+		local punchTween = TweenService:Create(BackpackButton, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true), {
+			Size = UDim2.new(originalSize.X.Scale * 1.3, originalSize.X.Offset, originalSize.Y.Scale * 1.3, originalSize.Y.Offset)
+		})
+		punchTween:Play()
+		clone:Destroy()
+		animGui:Destroy()
+	end)
+end
+
+
+-- ==========================================
+-- === ЛОГИКА ОКНА НАГРАДЫ (RewardGui) ===
+-- ==========================================
+local function openRewardInterface(config)
+	if not RewardGui or not RewardBg then 
+		warn("Покупка без анимации (RewardGui не настроен).")
+		BuySetEvent:FireServer(config.SetName)
+		return 
+	end
+
+	currentRewardSession = currentRewardSession + 1
+	local thisSessionID = currentRewardSession
+
+	-- Скрываем магазины
+	closeAll()
+
+	-- Включаем RewardGui
+	RewardGui.Enabled = true
+	RewardBg.Visible = true
+	
+	-- Блюр
+	local blurTween = TweenService:Create(ShopBlur, TweenInfo.new(0.5), {Size = 24})
+	blurTween:Play()
+
+	-- Заполняем данные
+	RewardCard.Image = config.ImageId
+	RewardName.Text = config.SetName
+
+	-- Вращение лучей
+	if RaysImage then
+		RaysImage.Visible = true
+		if rotationConnection then rotationConnection:Disconnect() end
+		rotationConnection = RunService.RenderStepped:Connect(function()
+			RaysImage.Rotation = RaysImage.Rotation + 0.5
+		end)
+	end
+
+	-- ФУНКЦИЯ ЗАБРАТЬ (CLAIM)
+	local function claim()
+		if currentRewardSession ~= thisSessionID then return end
+		currentRewardSession = currentRewardSession + 1 
+
+		if rotationConnection then rotationConnection:Disconnect() end
+
+		-- 1. Анимация полета
+		playCoolFlyAnimation(config.ImageId)
+
+		-- 2. Отправляем серверу сигнал о покупке
+		BuySetEvent:FireServer(config.SetName)
+
+		-- 3. Закрываем награду и возвращаем магазин
+		RewardGui.Enabled = false
+		SnowBricksShop.Visible = true -- Возвращаем игрока в магазин
+
+		local unblurTween = TweenService:Create(ShopBlur, TweenInfo.new(0.5), {Size = 0})
+		unblurTween:Play()
+	end
+
+	local connection
+	connection = ClaimButton.MouseButton1Click:Connect(function()
+		connection:Disconnect() 
+		claim()
+	end)
+end
+
+
+-- ==========================================
+-- === ЛОГИКА НАВИГАЦИИ ===
+-- ==========================================
+
+function closeAll()
+	ChoiceFrame.Visible = false
+	LTBrickSetsShop.Visible = false
+	SnowBricksShop.Visible = false
+	InviteShop.Visible = false
+end
+
+-- Открытие главного меню (Умная кнопка)
+OpenShopButton.MouseButton1Click:Connect(function()
+	local isSomethingOpen = ChoiceFrame.Visible or LTBrickSetsShop.Visible or SnowBricksShop.Visible or InviteShop.Visible
+	closeAll()
+	if not isSomethingOpen then
+		ChoiceFrame.Visible = true
+	end
+end)
+
+RBBrickSetButton.MouseButton1Click:Connect(function() closeAll(); LTBrickSetsShop.Visible = true end)
+RBSnowBricksButton.MouseButton1Click:Connect(function() closeAll(); SnowBricksShop.Visible = true end)
+RBInviteButton.MouseButton1Click:Connect(function() closeAll(); InviteShop.Visible = true end)
+
+local function setupClose(frame)
+	local closeBtn = frame:FindFirstChild("CloseButton") or frame:FindFirstChild("Back") or frame:FindFirstChild("Close")
+	if closeBtn then
+		closeBtn.MouseButton1Click:Connect(function()
+			closeAll()
+			ChoiceFrame.Visible = true
+		end)
+	end
+end
+setupClose(LTBrickSetsShop)
+setupClose(SnowBricksShop)
+setupClose(InviteShop)
+
+
+-- ==========================================
+-- === ПОКУПКИ (СВЯЗКА КНОПОК И КАРТИНОК) ===
+-- ==========================================
+
+local Buy1 = SnowBricksShop:FindFirstChild("Buy1Button", true) -- BrickSet8
+local Buy2 = SnowBricksShop:FindFirstChild("Buy2Button", true) -- BrickSet9
+
+-- Поиск картинок для анимации по именам, которые ты указал
+local Image8Obj = SnowBricksShop:FindFirstChild("BrickSet8Image", true)
+local Image9Obj = SnowBricksShop:FindFirstChild("BrickSet9Image", true)
+
+-- Берем ID картинки или ставим пустую, если не нашли
+local Image8Id = Image8Obj and Image8Obj.Image or "rbxassetid://0"
+local Image9Id = Image9Obj and Image9Obj.Image or "rbxassetid://0"
+
+if Buy1 then
+	Buy1.MouseButton1Click:Connect(function()
+		openRewardInterface({
+			SetName = "BrickSet8",
+			ImageId = Image8Id,
+			Price = 2000
+		})
+	end)
+end
+
+if Buy2 then
+	Buy2.MouseButton1Click:Connect(function()
+		openRewardInterface({
+			SetName = "BrickSet9",
+			ImageId = Image9Id, 
+			Price = 2000
+		})
+	end)
+end
+
+-- === ВАЖНОЕ: БЛОКИРОВКА КНОПОК ПОСЛЕ ПОКУПКИ ===
+UpdateShopUI.OnClientEvent:Connect(function(ownedSets)
+	-- ownedSets - это список всего, что есть у игрока
+	
+	if Buy1 then
+		local isOwned = table.find(ownedSets, "BrickSet8")
+		if isOwned then
+			Buy1.Visible = false -- Скрываем
+			Buy1.Active = false  -- Блокируем клики
+		else
+			Buy1.Visible = true
+			Buy1.Active = true
+		end
+	end
+
+	if Buy2 then
+		local isOwned = table.find(ownedSets, "BrickSet9")
+		if isOwned then
+			Buy2.Visible = false
+			Buy2.Active = false
+		else
+			Buy2.Visible = true
+			Buy2.Active = true
+		end
+	end
+end)
