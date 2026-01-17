@@ -1,0 +1,45 @@
+
+let current_question
+let correct_answers_given
+let total_answers_given
+
+start_button.addEventListener('click', function() {
+    container_main.style.display = 'flex'
+    container_start.style.display = 'none'
+    current_question = new Question()
+    current_question.display()
+
+    correct_answers_given = 0
+    total_answers_given = 0
+
+    setTimeout(function() {
+        container_main.style.display = 'none'
+        container_start.style.display = 'flex'
+        
+        let accuracy = total_answers_given > 0 ? Math.round(correct_answers_given * 100 / total_answers_given) : 0;
+        result.innerHTML = `<h3>Ви дали ${correct_answers_given} правильних відповідей із ${total_answers_given}. Точність - ${accuracy}%.</h3>`
+    }, 10000)
+})
+
+for (let i = 0; i < answer.length; i += 1) {
+    answer[i].addEventListener('click', function() {
+        if (parseInt(answer[i].innerHTML) == current_question.correct) {
+            correct_answers_given += 1
+            answer[i].style.background = '#00FF00'
+        } else {
+            answer[i].style.background = '#FF0000'
+        }
+        
+        anime({
+            targets: answer[i],
+            background: '#FFFFFF',
+            duration: 500,
+            delay: 100,
+            easing: 'linear'
+        })
+
+        total_answers_given += 1
+        current_question = new Question()
+        current_question.display()
+    })
+}
