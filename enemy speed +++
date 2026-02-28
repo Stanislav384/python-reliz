@@ -1,0 +1,174 @@
+import time
+import random
+
+def menu():
+    from PyQt5.QtWidgets import QWidget, QApplication, QPushButton, QVBoxLayout
+    from PyQt5.QtCore import Qt
+    app = QApplication([])
+
+    screen = QWidget()
+    screen.resize(800, 600)
+    screen.setWindowTitle('Sea-miss')
+    screen.show()
+
+    play = QPushButton('Play')
+    exit_btn = QPushButton('Exit')
+
+    line = QVBoxLayout()
+    line.addWidget(play, alignment=Qt.AlignCenter)
+    line.addWidget(exit_btn, alignment=Qt.AlignCenter)
+
+    def exit_game():
+        screen.close()
+    exit_btn.clicked.connect(exit_game)
+
+    def start_game():
+        screen.close()
+        run()
+    play.clicked.connect(start_game)
+
+    screen.setLayout(line)
+    app.exec_()
+
+
+def run():
+    import pygame 
+    pygame.init()
+    # pygame.mixer.init()
+
+    # pygame.mixer.music.load('space.ogg')
+    # pygame.mixer.music.set_volume(0.1)
+    # pygame.mixer.music.play(-1)
+
+    # shoot_sound = pygame.mixer.Sound('shoot.mp3')
+    # shoot_sound.set_volume(0.1)
+    # hit_sound = pygame.mixer.Sound('hit.mp3')
+    # hit_sound.set_volume(0.8)
+
+    WIDTH, HEIGHT = 800, 600
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Sea-miss")
+    background = pygame.image.load("sea.jpg")
+    background = pygame.transform.scale(background, (WIDTH, HEIGHT))
+
+    class Player():
+        def __init__(self, x, y, width, height): # Исправлено на __init__
+            self.image = pygame.image.load("boat.png")
+            self.image = pygame.transform.scale(self.image, (width, height))
+            self.rect = self.image.get_rect()
+            self.rect.x = x
+            self.rect.y = y
+            self.health = 3
+
+        def draw(self):
+            screen.blit(self.image, self.rect)
+
+    class Enemy():
+        def __init__(self): # Исправлено на __init__
+            self.image = pygame.image.load("bomba.png")
+            self.image = pygame.transform.scale(self.image, (100, 100))
+            self.rect = self.image.get_rect()
+            self.rect.x = random.randint(50, 750)
+            self.rect.y = -50
+            # Враг получает текущую глобальную скорость при появлении
+            self.speed = current_enemy_speed 
+
+        def update(self):
+            self.rect.y += self.speed 
+
+        def draw(self):
+            screen.blit(self.image, self.rect)
+
+    # --- НАСТРОЙКА УСКОРЕНИЯ ВРАГОВ ---
+    current_enemy_speed = 3 # Базовая скорость
+    INCREASE_SPEED_EVENT = pygame.USEREVENT + 1
+    pygame.time.set_timer(INCREASE_SPEED_EVENT, 5000) # Таймер на 5000 мс (5 сек)
+    # ----------------------------------
+
+    enemies = []
+    last_enemy_spawn_time = pygame.time.get_ticks()
+    spawn_interval = random.randint(1000, 3000)
+
+    score_miss = 0
+
+    player_x = WIDTH // 2 - 32
+    player_y = HEIGHT - 100
+    player_forward = 0
+    player = Player(player_x, player_y, 120, 120)
+
+    font = pygame.font.Font(None, 36)
+    clock = pygame.time.Clock()
+    start = True 
+
+    start_time = time.time()
+
+    while start:
+        screen.blit(background, (0,0))
+        player.draw()
+
+        health_text = font.render(f"Кількість здоров'я: {player.health}", True, "red")
+        screen.blit(health_text, (0,0))
+
+        total_miss_text = font.render(f"Кількість пропущених:{score_miss}", True, "blue")
+        screen.blit(total_miss_text, (0,60))
+
+        # Отображаем текущую скорость врагов
+        speed_text = font.render(f"Швидкість:{current_enemy_speed}", True, "orange")
+        screen.blit(speed_text, (0,90))
+
+        if player.health <= 0:
+            start = False # Завершаем цикл, чтобы окно корректно закрылось
+
+        # Обработка событий (включая наш таймер)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                start = False 
+                
+            # --- ЛОВИМ СОБЫТИЕ ТАЙМЕРА И УВЕЛИЧИВАЕМ СКОРОСТЬ ---
+            if event.type == INCREASE_SPEED_EVENT:
+                current_enemy_speed += 1
+            # ----------------------------------------------------
+                
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_RIGHT, pygame.K_d):
+                    player_forward = 5
+                if event.key in (pygame.K_LEFT, pygame.K_a):
+                    player_forward = -5
+
+            if event.type == pygame.KEYUP:
+                if event.key in (pygame.K_RIGHT, pygame.K_d, pygame.K_LEFT, pygame.K_a):
+                    player_forward = 0
+
+        # Спавн врагов
+        current_time = pygame.time.get_ticks()
+        if current_time - last_enemy_spawn_time > spawn_interval:
+            new_enemy = Enemy()
+            enemies.append(new_enemy)
+            last_enemy_spawn_time = pygame.time.get_ticks()
+            # Можно также уменьшать интервал спавна с ростом скорости, если захочешь
+            spawn_interval = random.randint(1000, 3000) 
+        
+        # Обновление и отрисовка врагов
+        for enemy in enemies[:]: 
+            enemy.update()
+            enemy.draw()
+
+            # Пропуск врага
+            if enemy.rect.top > HEIGHT:
+                enemies.remove(enemy)
+                score_miss += 1
+
+            # Столкновение с игроком (исправлено на enemy.rect.colliderect(player.rect))
+            elif enemy.rect.colliderect(player.rect):
+                player.health -= 1
+                enemies.remove(enemy)
+
+        # Движение игрока
+        player.rect.x += player_forward
+        
+        pygame.display.flip()
+        clock.tick(60)
+        
+    pygame.quit()
+
+menu()
