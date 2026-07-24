@@ -1,147 +1,134 @@
-import sys
-from PyQt5.QtCore import QUrl
-from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog
-from ui import Ui_MainWindow
-import os 
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap 
-from PIL import Image, ImageFilter
+import pygame
+from random import randint
 
-class ImageProcessor():
-    def __init__(self):
-        self.image = None 
-        self.dir = None 
-        self.filename = None 
-        self.save_dir = "Modified/"
+pygame.init()
 
-    def loadImage(self, dir, filename):
-        self.dir = dir 
-        self.filename = filename 
-        image_path = os.path.join(dir, filename)
-        self.image = Image.open(image_path)
-    
-    def showImage(self, label_widget, path):
-        label_widget.hide()
-        pixmapimage = QPixmap(path)
-        w, h = label_widget.width(), label_widget.height()
+WIDTH, HEIGHT = 1200, 800
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+background = pygame.image.load("background.png")
+background = pygame.transform.scale(background, (WIDTH, HEIGHT))
+clock = pygame.time.Clock()
 
-        pixmapimage = pixmapimage.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        label_widget.setPixmap(pixmapimage)
-        label_widget.show()
-    
-    def saveImage(self):
-        path = os.path.join(self.dir, self.save_dir)
-        if not os.path.exists(path) or not os.path.isdir(path):
-            os.mkdir(path)
-        image_path = os.path.join(path, self.filename)
-        self.image.save(image_path, quality=95)
-        return image_path
+# НАЛАШТУВАННЯ В ГРІ.
+# GRAVITY - сила притяжіння, чим більше число там бистріше притягує.
+# JUMP_FORCE - висота стрибка, чим менше число (-20 і т.д...) тим вище стрибок
+# GROUND_Y - координата до якої буде притягувати гравця у грі.
+GRAVITY = 1
+GROUND_Y = 450
+JUMP_FORCE = -20 
 
 
-    def do_left(self):
-        self.image = self.image.transpose(Image.ROTATE_90)
-        return self.saveImage()
-    
-    def do_right(self):
-        self.image = self.image.transpose(Image.ROTATE_270)
-        return self.saveImage()
-    
-    def do_flip(self):
-        self.image = self.image.transpose(Image.FLIP_LEFT_RIGHT)
-        return self.saveImage()
-    
-    def do_bw(self):
-        self.image = self.image.convert("L")
-        return self.saveImage()
-    
-    def do_sharpen(self):
-        self.image = self.image.filter(ImageFilter.SHARPEN)
-        return self.saveImage()
-
-class Widget(QMainWindow):
-    def __init__(self):
+# 1. Добавление класса для платформ (наследует от GameObject)
+class Platform(pygame.sprite.Sprite):
+    def __init__(self, x, y, width, height, filename):
         super().__init__()
-        self.ui = Ui_MainWindow()
-        self.ui.setupUi(self)
-        self.configure()
-        self.workdir = ''
-        self.workimage = ImageProcessor()
-        # ЦЕ РОЗМІР ФОТО!
-        self.ui.image.resize(600, 400)
-        # ЦЕ ЗДВИГ ФОТО! 
-        self.ui.image.move(180, 60)
-        
-    def configure(self):
-        self.ui.open_folder.clicked.connect(self.showFilenamesList)
-        self.ui.list_image.currentRowChanged.connect(self.showChosenImage)
-        # ДОДАЄМО ФУНКЦІОНАЛ ДЛЯ КНОПОК)
-        self.ui.rotate_left.clicked.connect(self.work_left)
-        self.ui.rotate_right.clicked.connect(self.work_right)
-        self.ui.mirror_image.clicked.connect(self.work_mirror)
-        self.ui.sharpness_image.clicked.connect(self.work_sharpen)
-        self.ui.black_white.clicked.connect(self.work_bw)
-
-
-    def work_left(self):
-        path = self.workimage.do_left()
-        self.workimage.showImage(self.ui.image, path)
-
-    def work_right(self):
-        path = self.workimage.do_right()
-        self.workimage.showImage(self.ui.image, path)
-
-    def work_mirror(self):
-        path = self.workimage.do_flip()
-        self.workimage.showImage(self.ui.image, path)
+        self.image = pygame.image.load(filename)
+        self.image = pygame.transform.scale(self.image, (width, height))
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
     
-    def work_bw(self):
-        path = self.workimage.do_bw()
-        self.workimage.showImage(self.ui.image, path)
+    def draw(self):
+        screen.blit(self.image, self.rect)
 
-    def work_sharpen(self):
-        path = self.workimage.do_sharpen()
-        self.workimage.showImage(self.ui.image, path)
+
+# 2. Изменение класса GameObject для проверки столкновений
+class GameObject():
+    def __init__(self, filename, x=0, y=0, width=10, height=10):
+        self.image_right = pygame.image.load(filename)
+        self.image_right = pygame.transform.scale(self.image_right, (width, height))
+        self.image_left = pygame.transform.flip(self.image_right, True, False)
+        self.image = self.image_right
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.facing_right = True
+        self.velocity = 0
+        self.isJumping = False
+        self.on_ground = True 
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+    def move(self, dx):
+        self.rect.x += dx
+        if dx > 0:
+            self.image = self.image_right
+            self.facing_right = True
+        elif dx < 0:
+            self.image = self.image_left
+            self.facing_right = False
+
+    def apply_gravity(self, platforms):
+        self.velocity += GRAVITY
+        self.rect.y += self.velocity
+
+        for platform in platforms:
+            if self.rect.colliderect(platform.rect):
+                if self.velocity > 0:
+                    self.rect.bottom = platform.rect.top
+                    self.velocity = 0
+                    self.isJumping = False
+                    self.on_ground = True
+                    return  #
+        if self.rect.y >= GROUND_Y:
+            self.rect.y = GROUND_Y 
+            self.velocity = 0
+            self.isJumping = False
+            self.on_ground = True
+
+
+    def jump(self):
+        if self.on_ground:  
+            self.velocity = JUMP_FORCE
+            self.isJumping = True
+            self.on_ground = False
+
+
+# 3. Параметры и создание объектов (добавляем платформы)
+start = True
+
+player_x = 0
+player_y = 450
+player_idle = 0
+player1 = GameObject("player.png", player_x, player_y, 300, 300)
+
+# Создаем список с платформами
+platforms = []
+#                          x       y     width    height   картинка платформи
+platforms.append(Platform(500,    350,    200,      50,     "platform.png")) # Первая платформа
+
+platforms.append(Platform(800, 250, 250, 50, "platform.png")) # Вторая платформа
+platforms.append(Platform(100, 200, 150, 50, "platform.png")) # Третья платформа
+
+
+# 4. Цикл программы (добавляем отрисовку платформ)
+while start:
+    screen.blit(background, (0,0))
     
+    for platform in platforms:
+        platform.draw()
 
-    def filter(self, files, extensions):
-        result = []
-        for filename in files:
-            for ext in extensions:
-                if filename.lower().endswith(ext):
-                    result.append(filename)
-                    break 
-        return result 
+    player1.draw()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            start = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_RIGHT:
+                player_idle = 5
+            if event.key == pygame.K_LEFT:
+                player_idle = -5
+            if event.key == pygame.K_SPACE:
+                player1.jump()
+            
+        if event.type == pygame.KEYUP:
+            if event.key in (pygame.K_RIGHT, pygame.K_LEFT):
+                player_idle = 0
+
     
-    def showFilenamesList(self):
-        # 1. Спочатку отримую папку яку я вибрав.
-        dir_path = QFileDialog.getExistingDirectory(self, "Оберіть папку: ")
-        # 2. Перевіряю чи я взагалі щось вибрав. (вибрав папку)
-        if dir_path:
-            # 3. Якщо я вибрав папку, то я з dir_path (тут посилання на папку) переносю в workdir
-            self.workdir = dir_path 
-            # 4. Це розширення фото які я буду потім фільтрувати.
-            extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp']
-            # 5. Витягую УСІ файли (без фільтру) і зберігаю їх у змінну.
-            all_files_in_dir = os.listdir(self.workdir)
-            # 6. Фільтрація (З нею я отримаю ТІЛЬКИ ті файли в яких є формат вказаний в extensions)
-            filenames = self.filter(all_files_in_dir, extensions)
-            # 7. Оновлення списку на екрані.
-            self.ui.list_image.clear()
-            self.ui.list_image.addItems(filenames)
+    player1.move(player_idle)
+    player1.apply_gravity(platforms)
     
-    def showChosenImage(self):
-        if self.ui.list_image.currentRow() >= 0:
-            filename = self.ui.list_image.currentItem().text()
-            self.workimage.loadImage(self.workdir, filename)
-            image_path = os.path.join(self.workimage.dir, self.workimage.filename)
-            self.workimage.showImage(self.ui.image, image_path)
-
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    ex = Widget()
-    ex.show()
-    sys.exit(app.exec_())
-
-
-
+    pygame.display.flip()
+    clock.tick(60)
+pygame.quit()
