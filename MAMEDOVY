@@ -1,0 +1,163 @@
+import pygame
+from random import randint
+
+pygame.init()
+
+WIDTH, HEIGHT = 1200, 800
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Сбор монет")
+background = pygame.image.load("background.png")
+background = pygame.transform.scale(background, (WIDTH, HEIGHT))
+clock = pygame.time.Clock()
+
+# НАЛАШТУВАННЯ В ГРІ.
+GRAVITY = 1
+GROUND_Y = 580
+JUMP_FORCE = -24
+
+# Настройка шрифта для отображения счёта
+font = pygame.font.SysFont("Arial", 36)
+score = 0
+
+
+# 1. Класс для платформ (исправлен __init__)
+class Platform(pygame.sprite.Sprite):
+    def __init__(self, x, y, width, height, filename):
+        super().__init__()
+        self.image = pygame.image.load(filename)
+        self.image = pygame.transform.scale(self.image, (width, height))
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+    
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+
+# 2. Игровой объект (исправлен __init__)
+class GameObject():
+    def __init__(self, filename, x=0, y=0, width=10, height=10):
+        self.image_right = pygame.image.load(filename)
+        self.image_right = pygame.transform.scale(self.image_right, (width, height))
+        self.image_left = pygame.transform.flip(self.image_right, True, False)
+        self.image = self.image_right
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.facing_right = True
+        self.velocity = 0
+        self.isJumping = False
+        self.on_ground = True 
+
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+    def move(self, dx):
+        self.rect.x += dx
+        if dx > 0:
+            self.image = self.image_right
+            self.facing_right = True
+        elif dx < 0:
+            self.image = self.image_left
+            self.facing_right = False
+
+    def apply_gravity(self, platforms):
+        self.velocity += GRAVITY
+        self.rect.y += self.velocity
+
+        for platform in platforms:
+            if self.rect.colliderect(platform.rect):
+                if self.velocity > 0:
+                    self.rect.bottom = platform.rect.top
+                    self.velocity = 0
+                    self.isJumping = False
+                    self.on_ground = True
+                    return
+        if self.rect.y >= GROUND_Y:
+            self.rect.y = GROUND_Y 
+            self.velocity = 0
+            self.isJumping = False
+            self.on_ground = True
+
+    def jump(self):
+        if self.on_ground:  
+            self.velocity = JUMP_FORCE
+            self.isJumping = True
+            self.on_ground = False
+
+
+# 3. Создание объектов
+start = True
+
+player_x = 0
+player_y = 380
+player_idle = 0
+player1 = GameObject("player.png", player_x, player_y, 80, 130)
+Seal = GameObject("Seal.png", 1050, 600, 140, 140)
+
+# Список всех монет
+coins = [
+    GameObject("coin.png", 810, 325, 50, 50),
+    GameObject("coin.png", 865, 325, 50, 50),
+    GameObject("coin.png", 920, 325, 50, 50),
+    GameObject("coin.png", 975, 325, 50, 50),
+    GameObject("coin.png", 510, 410, 50, 50),
+    GameObject("coin.png", 630, 410, 50, 50),
+    GameObject("coin.png", 200, 260, 50, 50),
+]
+
+# Список с платформами
+platforms = [
+    Platform(500, 450, 200, 50, "platform.png"),
+    Platform(800, 350, 250, 50, "platform.png"),
+    Platform(150, 300, 150, 50, "platform.png")
+]
+
+
+# 4. Главный игровой цикл
+while start:
+    screen.blit(background, (0, 0))
+    
+    # Отрисовка платформ
+    for platform in platforms:
+        platform.draw()
+
+    # Отрисовка игрока и котика
+    player1.draw()
+    Seal.draw()
+
+    # Сбор монет и их отрисовка (итерируемся по копии списка coins[:], чтобы безопасно удалять элементы)
+    for coin in coins[:]:
+        coin.draw()
+        if player1.rect.colliderect(coin.rect):
+            score += 1
+            coins.remove(coin)
+
+    # Отрисовка текста со счётом на экране
+    score_text = font.render(f"Монеты: {score}", True, (255, 255, 255))
+    screen.blit(score_text, (20, 20))
+
+    # Обработка событий
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            start = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_d:
+                player_idle = 5
+            if event.key == pygame.K_a:
+                player_idle = -5
+            if event.key == pygame.K_SPACE:
+                player1.jump()
+            
+        if event.type == pygame.KEYUP:
+            if event.key in (pygame.K_d, pygame.K_a):
+                player_idle = 0
+
+    # Движение и физика
+    player1.move(player_idle)
+    player1.apply_gravity(platforms)
+    
+    pygame.display.flip()
+    clock.tick(60)
+
+pygame.quit()
