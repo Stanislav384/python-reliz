@@ -1,0 +1,74 @@
+import sys
+import os
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QPushButton, 
+    QFileDialog, QListWidget, QMessageBox
+)
+
+class FolderCreatorApp(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle('Створення та відкриття папки')
+        self.resize(400, 300)
+
+        layout = QVBoxLayout()
+
+        # Кнопка для створення папки
+        self.btn_create = QPushButton('Створити папку', self)
+        self.btn_create.clicked.connect(self.create_and_open_folder)
+        layout.addWidget(self.btn_create)
+
+        # Список для відображення вмісту створеної папки
+        self.list_widget = QListWidget(self)
+        layout.addWidget(self.list_widget)
+
+        self.setLayout(layout)
+
+    def create_and_open_folder(self):
+        # 1. Відкриваємо діалогове вікно для вибору батьківської директорії
+        parent_dir = QFileDialog.getExistingDirectory(
+            self, 
+            "Виберіть місце для створення папки", 
+            ""
+        )
+
+        if not parent_dir:
+            return  # Користувач скасував вибір
+
+        # Ім'я нової папки
+        folder_name = "Нова папка"
+        new_folder_path = os.path.join(parent_dir, folder_name)
+
+        # Обробка ситуації, якщо папка з таким ім'ям вже існує
+        counter = 1
+        original_path = new_folder_path
+        while os.path.exists(new_folder_path):
+            new_folder_path = f"{original_path} ({counter})"
+            counter += 1
+
+        try:
+            # 2. Створюємо папку
+            os.makedirs(new_folder_path)
+
+            # 3. Відразу запускаємо (відкриваємо) папку в Провіднику Windows
+            os.startfile(new_folder_path)
+
+            # 4. Показуємо вміст у QListWidget
+            self.list_widget.clear()
+            items = os.listdir(new_folder_path)
+            if items:
+                self.list_widget.addItems(items)
+            else:
+                self.list_widget.addItem("(Папка порожня)")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Помилка", f"Не вдалося створити папку:\n{str(e)}")
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    ex = FolderCreatorApp()
+    ex.show()
+    sys.exit(app.exec_())
